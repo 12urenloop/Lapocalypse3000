@@ -16,6 +16,11 @@ const server = net.createServer((socket) => {
         if (data.length < 4) {
             console.log("Not enough bytes yet:", data);
             return;
+        }else if(data.length > 16) {
+            const json = JSON.parse(data.toString('utf-8'));
+            const anchor10 = json.anchors.A1;
+            console.log(anchor10);
+            return;
         }
 
         // Read uint32 in big-endian

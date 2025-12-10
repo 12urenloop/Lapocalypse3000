@@ -10,7 +10,13 @@
 
 
 ## code/controlserver
-For sending commands to the ESP32 (reading and writing registers and OTP)
+For sending commands to the ESP32 (reading and writing registers and OTP. Receives metrics (like distance and rssi) from UWB modules and publishes them on MQTT.
 
-## code/ESP32/dwm-debug.ino
-code from [CircuitDigest](https://github.com/Circuit-Digest/ESP32-DWM3000-UWB-Indoor-RTLS-Tracker), with extra comments and logic to receive commands from server.
+## code/dashboard
+Bevy app that plots realtime metrics coming from MQTT.
+
+## code/ESP32/tag
+tag code from [CircuitDigest](https://github.com/Circuit-Digest/ESP32-DWM3000-UWB-Indoor-RTLS-Tracker), with extra comments and logic to receive commands from server. This allows you to get and set registers and OTP memory interactively.
+
+## code/ESP32/anchor
+anchor code from [CircuitDigest](https://github.com/Circuit-Digest/ESP32-DWM3000-UWB-Indoor-RTLS-Tracker), with extra comments and (coming soon) logic to receive commands from server. This allows you to get and set registers and OTP memory interactively.

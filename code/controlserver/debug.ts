@@ -1,6 +1,20 @@
 import net from "net";
+import mqtt from "mqtt";
 
 const PORT = 7007;
+const MQTT_BROKER = "mqtt://localhost:1883";
+const MQTT_TOPIC = "uwb/distance";
+
+// MQTT client
+const mqttClient = mqtt.connect(MQTT_BROKER);
+
+mqttClient.on("connect", () => {
+    console.log("Connected to MQTT broker");
+});
+
+mqttClient.on("error", (err) => {
+    console.error("MQTT error:", err);
+});
 
 // Track connected clients
 const clients : Set<net.Socket> = new Set();
@@ -20,6 +34,13 @@ const server = net.createServer((socket) => {
             const json = JSON.parse(data.toString('utf-8'));
             const anchor10 = json.anchors.A1;
             console.log(anchor10);
+            
+            // Publish JSON data to MQTT
+            mqttClient.publish(MQTT_TOPIC, JSON.stringify(anchor10), (err) => {
+                if (err) {
+                    console.error("MQTT publish error:", err);
+                }
+            });
             return;
         }
 

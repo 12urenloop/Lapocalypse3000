@@ -3,10 +3,10 @@
 ### Developing a multi tag UWB realtime tracking system around the Qorvo DWM3000EVB for potential use in future 12Urenloop editions.
 
 ## Goals
-[x] Ranging between 2 modules
-[ ] Improving range (ideally ~30 meters)
-[ ] Multi Tag (this is a big one!)
-[ ] Triangulation
+- [x] Ranging between 2 modules
+- [ ] Improving range (ideally ~30 meters)
+- [ ] Multi Tag (this is a big one!)
+- [ ] Triangulation
 
 
 ## code/controlserver

@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <SPI.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
 // SPI Setup
 #define RST_PIN 27
 #define CHIP_SELECT_PIN 4
@@ -14,16 +16,40 @@ unsigned long last_ranging_time = 0;
 #define MAX_RETRIES 3
 int retry_count = 0;
 
-//ESP32 WROOM
-const int HSPI_MISO = 19;
-const int HSPI_MOSI = 23;
-const int HSPI_SCLK = 18;
-const int HSPI_SS = 4;
+// WiFi Configuration
+const char *ssid = "Zeus WPI";
+const char *password = "zeusisdemax";
+const char *host = "192.168.0.10"; // Your PC's IP address
 
-const int VSPI_MISO = 19;
-const int VSPI_MOSI = 23;
-const int VSPI_SCLK = 18;
-const int VSPI_SS = 4;
+const int port = 7007;             // Choose a port number
+WiFiClient client;
+bool wifiConnected = false;
+
+//ESP32 WROOM
+// const int HSPI_MISO = 19;
+// const int HSPI_MOSI = 23;
+// const int HSPI_SCLK = 18;
+// const int HSPI_SS = 4;
+
+// const int VSPI_MISO = 19;
+// const int VSPI_MOSI = 23;
+// const int VSPI_SCLK = 18;
+// const int VSPI_SS = 4;
+
+//WT32-ETH01
+
+const int HSPI_MISO = 15;
+const int HSPI_MOSI = 12;
+const int HSPI_SCLK = 14;
+const int HSPI_SS = 5;
+
+const int VSPI_MISO = 15;
+const int VSPI_MOSI = 12;
+const int VSPI_SCLK = 14;
+const int VSPI_SS = 5;
+#define CHIP_SELECT_PIN 5 // WT32-ETH01
+// #define CHIP_SELECT_PIN 4 // ESP32 WROOM
+
 
 static int rx_status;
 static int tx_status;
@@ -137,6 +163,33 @@ int destination = 0x0; // Default Values for Destination and Sender IDs
 int sender = 0x0;
 
 SPIClass vspi = SPIClass(VSPI);
+
+// WiFi Functions
+void connectToWiFi()
+{
+    Serial.println("Connecting to WiFi...");
+    WiFi.begin(ssid, password);
+
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20)
+    {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        wifiConnected = true;
+        Serial.println("\nWiFi connected");
+        Serial.print("IP address: ");
+        Serial.println(WiFi.localIP());
+    }
+    else
+    {
+        Serial.println("\nFailed to connect to WiFi");
+    }
+}
 
 class DWM3000Class
 {
@@ -262,10 +315,10 @@ DWM3000Class DWM3000;
 // Initial Radio Configuration
 int DWM3000Class::config[] = {
     CHANNEL_5,         // Channel
-    PREAMBLE_128,      // Preamble Length
+    PREAMBLE_4096,      // Preamble Length
     9,                 // Preamble Code (Same for RX and TX!)
     PAC8,              // PAC
-    DATARATE_6_8MB,    // Datarate
+    DATARATE_850KB,    // Datarate
     PHR_MODE_STANDARD, // PHR Mode
     PHR_RATE_850KB     // PHR Rate
 };
@@ -293,7 +346,8 @@ void DWM3000Class::begin()
 {
   delay(5);
   pinMode(CHIP_SELECT_PIN, OUTPUT);
-  vspi.begin();
+  vspi.begin(VSPI_SCLK, VSPI_MISO, VSPI_MOSI, VSPI_SS);
+  // vspi.begin();
 
   delay(5);
 
@@ -386,8 +440,8 @@ void DWM3000Class::init()
   write(0x3, 0x18, 0xE5E5); // THR_64 value set to 0x32
   int f = read(0x4, 0x20);
 
-  // SET PAC TO 32 (0x00) reg:06:00 bits:1-0, bit 4 to 0 (00001100) (0xC)
-  write(0x6, 0x0, 0x81101C);
+  // SET PAC TO 16 (0x01) reg:06:00 bits:1-0, bit 4 to 0 (00001100) (0xC)
+  write(0x6, 0x0, 0x81101D);
 
   write(0x07, 0x34, 0x4); // Enable temp sensor readings
 
@@ -403,6 +457,20 @@ void DWM3000Class::init()
   write(0x11, 0x04, 0xB40200);
 
   write(0x11, 0x08, 0x80030738);
+
+
+  // custom config
+
+  // // SFD timeout
+  // write(0x06, 0x02, 2048 +  1 - 8 + 8); // preamble length + 1 – PAC size + SFD length.
+
+
+  // // preamble detection timeout
+  // uint32_t regval = read(0x06, 0x04) & 0xFFFF0000;
+  // // regval += 65535; // max timeout ~250ms, only uncomment if you don't want the receiver on until receiving a frame
+  // write(0x06, 0x04, regval);
+
+
   Serial.println("[INFO] Initialization finished.\n");
 }
 
@@ -446,7 +514,7 @@ void DWM3000Class::writeSysConfig()
 
   chan_ctrl_val |= 0x1F00 & (config[2] << 8);
   chan_ctrl_val |= 0xF8 & (config[2] << 3);
-  chan_ctrl_val |= 0x06 & (0x01 << 1);
+  chan_ctrl_val |= 0x06 & (0x11 << 1); // 16 symbol decawave SFD type
 
   write(GEN_CFG_AES_HIGH_REG, 0x14, chan_ctrl_val); // Write new CHAN_CTRL data with updated values
 
@@ -872,6 +940,7 @@ int DWM3000Class::receivedFrameSucc()
   }
   else if ((sys_stat & SYS_STATUS_RX_ERR) > 0)
   {
+    Serial.printf("%#010x\n", sys_stat);  // print hex
     return 2;
   }
   return 0;
@@ -1767,8 +1836,89 @@ void setup()
   DWM3000.standardRX();
 }
 
+void handleCommand(const String& cmd) {
+    // Tokenize
+    int firstSpace  = cmd.indexOf(' ');
+    int secondSpace = cmd.indexOf(' ', firstSpace + 1);
+    int thirdSpace = cmd.indexOf(' ', secondSpace + 1);
+
+    String action = cmd.substring(0, firstSpace);
+
+    if (action == "get") {
+        if (firstSpace < 0 || secondSpace < 0) {
+            client.println("ERR Invalid format. Use: get <reg> <offset>");
+            return;
+        }
+
+        int reg    = cmd.substring(firstSpace + 1, secondSpace).toInt();
+        int offset = cmd.substring(secondSpace + 1).toInt();
+
+        // readRegisterBytes(reg, offset, buffer, numBytes);
+        uint32_t value = DWM3000.read(reg, offset);
+
+        // Send bytes back
+        client.write((uint8_t*)&value, sizeof(value));
+    }else if(action == "set"){
+        if (firstSpace < 0 || secondSpace < 0 || thirdSpace < 0) {
+            client.println("ERR Invalid format. Use: set <reg> <offset>");
+            return;
+        }
+
+        int reg    = cmd.substring(firstSpace + 1, secondSpace).toInt();
+        int offset = cmd.substring(secondSpace + 1, thirdSpace).toInt();
+
+        uint32_t data = cmd.substring(thirdSpace + 1).toInt();
+
+        DWM3000.write(reg, offset, data);
+        client.write("set OK");
+    }else if(action == "otp"){
+        if (firstSpace < 0) {
+            client.println("ERR Invalid format. Use: otp <reg>");
+            return;
+        }
+
+        int addr    = cmd.substring(firstSpace + 1).toInt();
+
+        // readRegisterBytes(reg, offset, buffer, numBytes);
+        uint32_t value = DWM3000.readOTP(addr);
+
+        // Send bytes back
+        client.write((uint8_t*)&value, sizeof(value));
+    }
+    else {
+        client.println("ERR Unknown command");
+    }
+}
+
 void loop()
 {
+  if (!wifiConnected)
+  {
+      connectToWiFi();
+      if (!wifiConnected)
+          return;
+  }
+
+  if (!client.connected()) {
+      Serial.println("Disconnected. Reconnecting...");
+      while (!client.connect(host, port)) {
+          delay(500);
+      }
+      Serial.println("connected!");
+  }
+
+  if (client.available()) {
+      String command = client.readStringUntil('\n');
+      command.trim();
+
+      if (command.length() > 0) {
+          Serial.println("Received command: " + command);
+          handleCommand(command);
+      }
+  }
+
+
+
   if (DWM3000.receivedFrameSucc() == 1 && DWM3000.ds_getStage() == 1 && DWM3000.getDestinationID() == ANCHOR_ID)
   {
     // Reset session if new ranging request arrives

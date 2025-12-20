@@ -77,9 +77,12 @@ fn describe_metrics() {
     gauge!("uwb/clock_offset").set(-10.0);
 }
 
-fn create_dashboard(mut commands: Commands) {
+fn create_dashboard(
+    mut commands: Commands,
+) {
     commands.spawn(Camera2d);
-    commands.spawn(DashboardWindow::new("Metrics Dashboard"));
+    let dashwin = DashboardWindow::new("Metrics Dashboard");
+    commands.spawn(dashwin);
 }
 
 fn update_metrics() {

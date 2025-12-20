@@ -8,39 +8,37 @@
 // replace with the pins you want to use
 
 //ESP32 WROOM
-// const int HSPI_MISO = 19;
-// const int HSPI_MOSI = 23;
-// const int HSPI_SCLK = 18;
-// const int HSPI_SS = 4;
+const int HSPI_MISO = 19;
+const int HSPI_MOSI = 23;
+const int HSPI_SCLK = 18;
+const int HSPI_SS = 4;
 
-// const int VSPI_MISO = 19;
-// const int VSPI_MOSI = 23;
-// const int VSPI_SCLK = 18;
-// const int VSPI_SS = 4;
+const int VSPI_MISO = 19;
+const int VSPI_MOSI = 23;
+const int VSPI_SCLK = 18;
+const int VSPI_SS = 4;
 
 //WT32-ETH01
 
-const int HSPI_MISO = 15;
-const int HSPI_MOSI = 12;
-const int HSPI_SCLK = 14;
-const int HSPI_SS = 5;
+// const int HSPI_MISO = 15;
+// const int HSPI_MOSI = 12;
+// const int HSPI_SCLK = 14;
+// const int HSPI_SS = 5;
 
-const int VSPI_MISO = 15;
-const int VSPI_MOSI = 12;
-const int VSPI_SCLK = 14;
-const int VSPI_SS = 5;
+// const int VSPI_MISO = 15;
+// const int VSPI_MOSI = 12;
+// const int VSPI_SCLK = 14;
+// const int VSPI_SS = 5;
+// #define CHIP_SELECT_PIN 5 // WT32-ETH01
+#define CHIP_SELECT_PIN 4 // ESP32 WROOM
 
 // WiFi Configuration
-const char *ssid = "Zeus WPI";
-const char *password = "zeusisdemax";
-const char *host = "192.168.0.10"; // Your PC's IP address
 const int port = 7007;             // Choose a port number
 WiFiClient client;
 bool wifiConnected = false;
 
 // SPI Setup
 #define RST_PIN 17
-#define CHIP_SELECT_PIN 5
 
 // Scalable Anchor Configuration
 #define NUM_ANCHORS 1 // Change this to scale the system
@@ -136,10 +134,10 @@ SPIClass vspi = SPIClass(VSPI);
 // Initial Radio Configuration
 int config[] = {
     CHANNEL_5,         // Channel
-    PREAMBLE_128,      // Preamble Length
+    PREAMBLE_4096,      // Preamble Length
     9,                 // Preamble Code (Same for RX and TX!)
-    PAC8,              // PAC
-    DATARATE_6_8MB,    // Datarate
+    PAC16,              // PAC
+    DATARATE_850KB,    // Datarate
     PHR_MODE_STANDARD, // PHR Mode
     PHR_RATE_850KB     // PHR Rate
 };
@@ -357,6 +355,7 @@ void sendDataOverWiFi()
 {
     if (!wifiConnected)
     {
+        Serial.println("reconnecting to wifi...");
         connectToWiFi();
         if (!wifiConnected)
             return;
@@ -364,6 +363,7 @@ void sendDataOverWiFi()
 
     if (!client.connected())
     {
+        Serial.println("reconnecting to control server...");
         if (!client.connect(host, port))
         {
             Serial.println("Connection to host failed");
@@ -529,6 +529,7 @@ void DWM3000Class::begin()
     delay(5);
     pinMode(CHIP_SELECT_PIN, OUTPUT);
     vspi.begin(VSPI_SCLK, VSPI_MISO, VSPI_MOSI, VSPI_SS);
+    // vspi.begin(); // ESP32 WROOM
     delay(5);
     spiSelect(CHIP_SELECT_PIN);
     Serial.println("[INFO] SPI ready");
@@ -596,7 +597,10 @@ void DWM3000Class::init()
     write(0x3, 0x50, 0x0001CFF5);
     write(0x3, 0x18, 0xE5E5); // RX tune configuration register
     int f = read(0x4, 0x20); // reads if calibration is complete
-    write(0x6, 0x0, 0x81101C); // preamble length, DT0B4 should be 0 for best performance, but isn't?, reserved bits getting written as well?
+
+    // SET PAC TO 16 (0x01) reg:06:00 bits:1-0, bit 4 to 0 (00001100) (0xC)
+    write(0x6, 0x0, 0x81101D);
+
     write(0x07, 0x34, 0x4); // enable SAR temperature sensor reading
     write(0x07, 0x48, 0x14); // LDO control, what's that? something with output voltage
     write(0x07, 0x1A, 0x0E); // tx control register, this value is for optimal performance
@@ -605,6 +609,19 @@ void DWM3000Class::init()
     write(0x09, 0x80, 0x81); // ?? this register isn't in the manual i think
     write(0x11, 0x04, 0xB40200); // gpio debounce clock enable, something else?
     write(0x11, 0x08, 0x80030738); // automatic IDLE_RC to IDLE_PLL
+
+
+    // custom config
+
+    // SFD timeout
+    // write(0x06, 0x02, 2048 +  1 - 8 + 8); // preamble length + 1 – PAC size + SFD length.
+
+
+    // preamble detection timeout
+    uint32_t regval = read(0x06, 0x04) & 0xFFFF0000;
+    regval += 65535; // max timeout ~250ms
+    write(0x06, 0x04, regval);
+
     Serial.println("[INFO] Initialization finished.\n");
 }
 
@@ -637,7 +654,7 @@ void DWM3000Class::writeSysConfig()
     chan_ctrl_val |= config[0];
     chan_ctrl_val |= 0x1F00 & (config[2] << 8);
     chan_ctrl_val |= 0xF8 & (config[2] << 3);
-    chan_ctrl_val |= 0x06 & (0x01 << 1);
+    chan_ctrl_val |= 0x06 & (0x11 << 1); // 16 symbol decawave SFD type
     write(GEN_CFG_AES_HIGH_REG, 0x14, chan_ctrl_val);
 
     // transmit frame control: frame length, bitrate, ranging enable, preamble config
@@ -645,7 +662,7 @@ void DWM3000Class::writeSysConfig()
     tx_fctrl_val |= (config[1] << 12);
     tx_fctrl_val |= (config[4] << 10);
     write(GEN_CFG_AES_LOW_REG, 0x24, tx_fctrl_val);
-    write(DRX_REG, 0x02, 0x81);
+    write(DRX_REG, 0x02, 0x0081); // SFD timeout
 
     int rf_tx_ctrl_2 = 0x1C071134;
     int pll_conf = 0x0F3C;
@@ -738,6 +755,8 @@ void DWM3000Class::writeSysConfig()
     write(RF_CONF_REG, 0x48, ldo_ctrl_val);
     write(0x0E, 0x02, 0x01); // set RX antenna delay to minimum
     setTXAntennaDelay(ANTENNA_DELAY);
+
+
 }
 
 void DWM3000Class::configureAsTX()
@@ -925,6 +944,7 @@ int DWM3000Class::receivedFrameSucc()
     }
     else if ((sys_stat & SYS_STATUS_RX_ERR) > 0)
     {
+        Serial.printf("%#010x\n", sys_stat);  // print hex
         return 2;
     }
     return 0;
@@ -1510,11 +1530,17 @@ void handleCommand(const String& cmd) {
 
         // Send bytes back
         client.write((uint8_t*)&value, sizeof(value));
+    }else if(action == "stage"){
+        uint32_t value = curr_stage;
+        Serial.printf("stage: %d\n", curr_stage);
+        client.write((uint8_t*)&value, sizeof(value));
     }
     else {
         client.println("ERR Unknown command");
     }
 }
+
+unsigned long sentmillis = 0;
 
 void loop()
 {
@@ -1550,6 +1576,7 @@ void loop()
         DWM3000.ds_sendFrame(1);
         currentAnchor->tx = DWM3000.readTXTimestamp();
         curr_stage = 1;
+        sentmillis = millis();
         break;
 
     case 1: // Await first response
@@ -1583,10 +1610,17 @@ void loop()
             }
             else
             {
-                Serial.print("[ERROR] Receiver Error from Anchor ");
+                Serial.print("[ERROR] Receiver Error stage 2 from Anchor ");
                 Serial.println(currentAnchorId);
                 DWM3000.clearSystemStatus();
+                curr_stage = 0;
             }
+        }else{
+            // if(millis() - sentmillis > 500){
+            //     DWM3000.clearSystemStatus();
+            //     curr_stage = 0;
+            //     Serial.println("RX timeout");
+            // }
         }
         break;
 
@@ -1597,6 +1631,7 @@ void loop()
         currentAnchor->t_roundA = currentAnchor->rx - currentAnchor->tx;
         currentAnchor->tx = DWM3000.readTXTimestamp();
         currentAnchor->t_replyA = currentAnchor->tx - currentAnchor->rx;
+        sentmillis = millis();
 
         curr_stage = 3;
         break;
@@ -1621,9 +1656,16 @@ void loop()
             }
             else
             {
-                Serial.print("[ERROR] Receiver Error from Anchor ");
+                Serial.print("[ERROR] Receiver Error stage 3 from Anchor ");
                 Serial.println(currentAnchorId);
                 DWM3000.clearSystemStatus();
+                curr_stage = 0;
+            }
+        }else{
+            if(millis() - sentmillis > 500){
+                DWM3000.clearSystemStatus();
+                curr_stage = 0;
+                Serial.println("RX timeout");
             }
         }
         break;

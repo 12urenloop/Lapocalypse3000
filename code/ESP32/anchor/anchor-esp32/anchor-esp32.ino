@@ -470,6 +470,13 @@ void DWM3000Class::init()
   // // regval += 65535; // max timeout ~250ms, only uncomment if you don't want the receiver on until receiving a frame
   // write(0x06, 0x04, regval);
 
+  // LEDs
+  write(0x5, 0x0, 0b001001001001001001001001001); // turn on all led GPIOs
+  uint32_t clk_ctrl = read(0x11, 0x4);
+  clk_ctrl |= 1 << 18; // enable debounce clocks
+  write(0x11, 0x4, clk_ctrl);
+  write(0x11, 0x16, 0x101); // enable blink and 14ms blink to manage brightness
+
 
   Serial.println("[INFO] Initialization finished.\n");
 }

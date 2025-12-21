@@ -47,7 +47,7 @@ const server = net.createServer((socket) => {
         // Read uint32 in big-endian
         const value = data.readUInt32LE(0);
         const valuehex = value.toString(16).toUpperCase().padStart(8, '0');
-        const binaryvalue = value.toString(2).padStart(32, '0');
+        const binaryvalue = value.toString(2).padStart(32, '0').match(/.{1,4}/g)?.join(' | ')
 
         console.log("Received uint32:", value, "hex=", valuehex, "binary=", binaryvalue);
     });

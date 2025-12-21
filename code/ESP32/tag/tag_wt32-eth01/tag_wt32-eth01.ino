@@ -2,6 +2,8 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 
+#include "wificonfig.h"
+
 #define HSPI 2  // 2 for S2 and S3, 1 for S1
 #define VSPI 3
 
@@ -654,14 +656,16 @@ void DWM3000Class::writeSysConfig()
     chan_ctrl_val |= config[0];
     chan_ctrl_val |= 0x1F00 & (config[2] << 8);
     chan_ctrl_val |= 0xF8 & (config[2] << 3);
-    chan_ctrl_val |= 0x06 & (0x11 << 1); // 16 symbol decawave SFD type
+    chan_ctrl_val |= 0x06 & (0x2 << 1); // 16 symbol decawave SFD type
     write(GEN_CFG_AES_HIGH_REG, 0x14, chan_ctrl_val);
 
     // transmit frame control: frame length, bitrate, ranging enable, preamble config
     int tx_fctrl_val = read(GEN_CFG_AES_LOW_REG, 0x24);
     tx_fctrl_val |= (config[1] << 12);
+    tx_fctrl_val ^= 1 << 10; // clear out datarate bit
     tx_fctrl_val |= (config[4] << 10);
     write(GEN_CFG_AES_LOW_REG, 0x24, tx_fctrl_val);
+
     write(DRX_REG, 0x02, 0x0081); // SFD timeout
 
     int rf_tx_ctrl_2 = 0x1C071134;

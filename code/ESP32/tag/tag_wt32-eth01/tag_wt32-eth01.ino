@@ -2,7 +2,6 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 
-#include "wificonfig.h"
 
 #define HSPI 2  // 2 for S2 and S3, 1 for S1
 #define VSPI 3
@@ -19,9 +18,9 @@ const int VSPI_MISO = 19;
 const int VSPI_MOSI = 23;
 const int VSPI_SCLK = 18;
 const int VSPI_SS = 4;
+#define CHIP_SELECT_PIN 4 // ESP32 WROOM
 
 //WT32-ETH01
-
 // const int HSPI_MISO = 15;
 // const int HSPI_MOSI = 12;
 // const int HSPI_SCLK = 14;
@@ -32,9 +31,11 @@ const int VSPI_SS = 4;
 // const int VSPI_SCLK = 14;
 // const int VSPI_SS = 5;
 // #define CHIP_SELECT_PIN 5 // WT32-ETH01
-#define CHIP_SELECT_PIN 4 // ESP32 WROOM
 
 // WiFi Configuration
+#include "wificonfig.h"
+#define USEWIFI false
+
 const int port = 7007;             // Choose a port number
 WiFiClient client;
 bool wifiConnected = false;
@@ -50,7 +51,7 @@ bool wifiConnected = false;
 // Ranging Configuration
 #define FILTER_SIZE 30 // For median filter
 #define MIN_DISTANCE 0
-#define MAX_DISTANCE 1000.0
+#define MAX_DISTANCE 5000.0 // 50 meters
 
 // UWB Configuration
 #define LEN_RX_CAL_CONF 4
@@ -355,7 +356,7 @@ void connectToWiFi()
 
 void sendDataOverWiFi()
 {
-    if (!wifiConnected)
+    if (USEWIFI && !wifiConnected)
     {
         Serial.println("reconnecting to wifi...");
         connectToWiFi();
@@ -363,7 +364,7 @@ void sendDataOverWiFi()
             return;
     }
 
-    if (!client.connected())
+    if (USEWIFI && !client.connected())
     {
         Serial.println("reconnecting to control server...");
         if (!client.connect(host, port))
@@ -507,7 +508,8 @@ void printAllDistances()
         }
         else
         {
-            Serial.print("INVALID");
+            Serial.print("INVALID - ");
+            DWM3000.printDouble(anchors[i].filtered_distance, 100, false);
         }
 
         if (i < NUM_ANCHORS - 1)
@@ -774,7 +776,7 @@ void DWM3000Class::writeSysConfig()
 void DWM3000Class::configureAsTX()
 {
     write(RF_CONF_REG, 0x1C, 0x34);
-    write(GEN_CFG_AES_HIGH_REG, 0x0C, 0xFDFDFDFD);
+    write(GEN_CFG_AES_HIGH_REG, 0x0C, 0xFEFEFEFE); // transmit power
 }
 
 void DWM3000Class::setupGPIO()
@@ -1449,7 +1451,7 @@ void setup()
     }
 
     // Connect to WiFi first
-    connectToWiFi();
+    if(USEWIFI) connectToWiFi();
 
     // Initialize UWB
     DWM3000.begin();
@@ -1559,7 +1561,7 @@ void loop()
     AnchorData *currentAnchor = getCurrentAnchor();
     int currentAnchorId = getCurrentAnchorId();
 
-    if (!client.connected()) {
+    if (USEWIFI && !client.connected()) {
         Serial.println("Disconnected. Reconnecting...");
         while (!client.connect(host, port)) {
             delay(500);
@@ -1567,7 +1569,7 @@ void loop()
         Serial.println("connected!");
     }
 
-    if (client.available()) {
+    if (USEWIFI && client.available()) {
         String command = client.readStringUntil('\n');
         command.trim();
 
@@ -1701,7 +1703,7 @@ void loop()
         printAllDistances();
 
         // Send data over WiFi if all anchors have valid data
-        if (allAnchorsHaveValidData())
+        if (USEWIFI && allAnchorsHaveValidData())
         {
             sendDataOverWiFi();
         }

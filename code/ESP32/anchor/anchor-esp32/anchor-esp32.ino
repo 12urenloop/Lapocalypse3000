@@ -17,9 +17,8 @@ unsigned long last_ranging_time = 0;
 int retry_count = 0;
 
 // WiFi Configuration
-const char *ssid = "Zeus WPI";
-const char *password = "zeusisdemax";
-const char *host = "192.168.0.10"; // Your PC's IP address
+#include "wificonfig.h"
+#define USEWIFI true
 
 const int port = 7007;             // Choose a port number
 WiFiClient client;
@@ -35,9 +34,9 @@ bool wifiConnected = false;
 // const int VSPI_MOSI = 23;
 // const int VSPI_SCLK = 18;
 // const int VSPI_SS = 4;
+// #define CHIP_SELECT_PIN 4 // ESP32 WROOM
 
 //WT32-ETH01
-
 const int HSPI_MISO = 15;
 const int HSPI_MOSI = 12;
 const int HSPI_SCLK = 14;
@@ -48,7 +47,7 @@ const int VSPI_MOSI = 12;
 const int VSPI_SCLK = 14;
 const int VSPI_SS = 5;
 #define CHIP_SELECT_PIN 5 // WT32-ETH01
-// #define CHIP_SELECT_PIN 4 // ESP32 WROOM
+
 
 
 static int rx_status;
@@ -648,7 +647,7 @@ void DWM3000Class::writeSysConfig()
 void DWM3000Class::configureAsTX()
 {
   write(RF_CONF_REG, 0x1C, 0x34); // write pg_delay
-  write(GEN_CFG_AES_HIGH_REG, 0x0C, 0xFDFDFDFD);
+  write(GEN_CFG_AES_HIGH_REG, 0x0C, 0xFEFEFEFE); // transmit power
 }
 
 /*
@@ -1899,14 +1898,14 @@ void handleCommand(const String& cmd) {
 
 void loop()
 {
-  if (!wifiConnected)
+  if (USEWIFI && !wifiConnected)
   {
       connectToWiFi();
       if (!wifiConnected)
           return;
   }
 
-  if (!client.connected()) {
+  if (USEWIFI && !client.connected() && USEWIFI) {
       Serial.println("Disconnected. Reconnecting...");
       while (!client.connect(host, port)) {
           delay(500);
@@ -1914,7 +1913,7 @@ void loop()
       Serial.println("connected!");
   }
 
-  if (client.available()) {
+  if (USEWIFI && client.available()) {
       String command = client.readStringUntil('\n');
       command.trim();
 
@@ -1962,9 +1961,10 @@ void loop()
           {
             Serial.print("[WARNING] Unexpected stage: ");
             Serial.println(DWM3000.ds_getStage());
-            DWM3000.ds_sendErrorFrame();
-            DWM3000.standardRX();
+            // DWM3000.ds_sendErrorFrame(); // turned this off experimentally
+            DWM3000.clearSystemStatus();
             curr_stage = 0;
+            DWM3000.standardRX();
           }
           else
           {
@@ -1981,6 +1981,8 @@ void loop()
       {
         Serial.println("[ERROR] Receiver Error occurred!");
         DWM3000.clearSystemStatus();
+        DWM3000.standardRX();
+        curr_stage = 0;
       }
     }
     else if (millis() - last_ranging_time > RESPONSE_TIMEOUT_MS)
@@ -2024,9 +2026,10 @@ void loop()
         {
           Serial.print("[WARNING] Unexpected stage: ");
           Serial.println(DWM3000.ds_getStage());
-          DWM3000.ds_sendErrorFrame();
-          DWM3000.standardRX();
+          // DWM3000.ds_sendErrorFrame(); // turned this off experimentally
+          DWM3000.clearSystemStatus();
           curr_stage = 0;
+          DWM3000.standardRX();
         }
         else
         {
@@ -2037,6 +2040,8 @@ void loop()
       {
         Serial.println("[ERROR] Receiver Error occurred!");
         DWM3000.clearSystemStatus();
+        curr_stage = 0;
+        DWM3000.standardRX();
       }
     }
     else if (millis() - last_ranging_time > RESPONSE_TIMEOUT_MS)

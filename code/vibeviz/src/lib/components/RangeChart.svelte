@@ -174,23 +174,7 @@
 		// Convert milliseconds to seconds (relative to start)
 		const toChartTime = (ms: number) => (ms - minTime) / 1000;
 
-		// Distance series - use 'left' price scale (dots only, no line)
-		distanceSeries = chart.addSeries(LineSeries, {
-			color: colors.distance,
-			lineWidth: 0,
-			lineVisible: false,
-			title: 'Distance (m)',
-			priceScaleId: 'left',
-			visible: showDistance,
-			pointMarkersVisible: true,
-			pointMarkersRadius: 3
-		});
-		const distanceData = rangeData.map((d) => ({
-			time: toChartTime(d.time) as any,
-			value: d.distance
-		}));
-		console.log('Distance data sample:', distanceData.slice(0, 3));
-		distanceSeries.setData(distanceData);
+		
 
 		// Raw series - same 'left' scale as distance
 		rawSeries = chart.addSeries(LineSeries, {
@@ -314,6 +298,24 @@
 			errorMarkersSeries.setData(uniqueErrorData);
 			console.log('Error markers added:', uniqueErrorData.length);
 		}
+
+        // Distance series - use 'left' price scale (dots only, no line)
+		distanceSeries = chart.addSeries(LineSeries, {
+			color: colors.distance,
+			lineWidth: 0,
+			lineVisible: false,
+			title: 'Distance (m)',
+			priceScaleId: 'left',
+			visible: showDistance,
+			pointMarkersVisible: true,
+			pointMarkersRadius: 3
+		});
+		const distanceData = rangeData.map((d) => ({
+			time: toChartTime(d.time) as any,
+			value: d.distance
+		}));
+		console.log('Distance data sample:', distanceData.slice(0, 3));
+		distanceSeries.setData(distanceData);
 
 		// Fit content
 		chart.timeScale().fitContent();

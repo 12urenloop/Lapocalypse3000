@@ -17,6 +17,7 @@
 
 	interface ErrorData {
 		time: number;
+        lastdistance: number;
 		message: string;
 	}
 
@@ -144,6 +145,7 @@
 
 			data.push({
 				time: timestamp,
+                lastdistance: rangeData.findLast(d => d.time <= timestamp)?.distance ?? 0,
 				message
 			});
 		}
@@ -176,6 +178,7 @@
 		distanceSeries = chart.addSeries(LineSeries, {
 			color: colors.distance,
 			lineWidth: 0,
+			lineVisible: false,
 			title: 'Distance (m)',
 			priceScaleId: 'left',
 			visible: showDistance,
@@ -205,6 +208,47 @@
 		);
 
 		// RSSI series - use 'right' price scale
+		// Create data with consistent 150ms intervals for stable timescale
+		const rssiDataMap = new Map<number, number>();
+		rangeData.forEach((d) => {
+			const t = toChartTime(d.time);
+			rssiDataMap.set(t, d.rssi);
+		});
+		
+		// Get time range and create regular intervals
+		const startTime = 0;
+		const endTime = toChartTime(rangeData[rangeData.length - 1].time);
+		const interval = 0.15; // 150 milliseconds in seconds
+		
+		const rssiRegularData: { time: any; value: number }[] = [];
+		let lastValue: number | null = null;
+		
+		for (let t = startTime; t <= endTime; t += interval) {
+			// Round to avoid floating point issues
+			const roundedT = Math.round(t * 1000) / 1000;
+			
+			// Find closest actual data point within this interval
+			let closestValue: number | null = null;
+			let closestDist = Infinity;
+			
+			for (const [dataTime, value] of rssiDataMap) {
+				const dist = Math.abs(dataTime - roundedT);
+				if (dist < interval / 2 && dist < closestDist) {
+					closestDist = dist;
+					closestValue = value;
+				}
+			}
+			
+			if (closestValue !== null) {
+				lastValue = closestValue;
+			}
+			
+			// Use the closest value, or the last known value, or skip if no data yet
+			if (lastValue !== null) {
+				rssiRegularData.push({ time: roundedT as any, value: lastValue });
+			}
+		}
+		
 		rssiSeries = chart.addSeries(LineSeries, {
 			color: colors.rssi,
 			lineWidth: 2,
@@ -212,12 +256,7 @@
 			priceScaleId: 'right',
 			visible: showRssi
 		});
-		rssiSeries.setData(
-			rangeData.map((d) => ({
-				time: toChartTime(d.time) as any,
-				value: d.rssi
-			}))
-		);
+		rssiSeries.setData(rssiRegularData);
 
 		// FP RSSI series - same 'right' scale as RSSI
 		fpRssiSeries = chart.addSeries(LineSeries, {
@@ -247,7 +286,7 @@
 			for (const e of errorData) {
 				const t = toChartTime(e.time);
 				// Add points for a vertical line at this time
-				errorSeriesData.push({ time: t as any, value: minDistance });
+				errorSeriesData.push({ time: t as any, value: e.lastdistance });
 			}
 			
 			// Sort by time
@@ -260,8 +299,8 @@
 			
 			errorMarkersSeries = chart.addSeries(LineSeries, {
 				color: '#FF0000',
-				lineWidth: 3,
-				lineStyle: 0, // Solid
+				lineWidth: 0,
+				lineVisible: false,
 				priceScaleId: 'left',
 				visible: showErrors,
 				lastValueVisible: false,

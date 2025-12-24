@@ -9,28 +9,28 @@
 // replace with the pins you want to use
 
 //ESP32 WROOM
-const int HSPI_MISO = 19;
-const int HSPI_MOSI = 23;
-const int HSPI_SCLK = 18;
-const int HSPI_SS = 4;
+// const int HSPI_MISO = 19;
+// const int HSPI_MOSI = 23;
+// const int HSPI_SCLK = 18;
+// const int HSPI_SS = 4;
 
-const int VSPI_MISO = 19;
-const int VSPI_MOSI = 23;
-const int VSPI_SCLK = 18;
-const int VSPI_SS = 4;
-#define CHIP_SELECT_PIN 4 // ESP32 WROOM
+// const int VSPI_MISO = 19;
+// const int VSPI_MOSI = 23;
+// const int VSPI_SCLK = 18;
+// const int VSPI_SS = 4;
+// #define CHIP_SELECT_PIN 4 // ESP32 WROOM
 
 //WT32-ETH01
-// const int HSPI_MISO = 15;
-// const int HSPI_MOSI = 12;
-// const int HSPI_SCLK = 14;
-// const int HSPI_SS = 5;
+const int HSPI_MISO = 15;
+const int HSPI_MOSI = 12;
+const int HSPI_SCLK = 14;
+const int HSPI_SS = 5;
 
-// const int VSPI_MISO = 15;
-// const int VSPI_MOSI = 12;
-// const int VSPI_SCLK = 14;
-// const int VSPI_SS = 5;
-// #define CHIP_SELECT_PIN 5 // WT32-ETH01
+const int VSPI_MISO = 15;
+const int VSPI_MOSI = 12;
+const int VSPI_SCLK = 14;
+const int VSPI_SS = 5;
+#define CHIP_SELECT_PIN 5 // WT32-ETH01
 
 // WiFi Configuration
 #include "wificonfig.h"
@@ -354,7 +354,7 @@ void connectToWiFi()
     }
 }
 
-void sendDataOverWiFi()
+void sendData()
 {
     if (USEWIFI && !wifiConnected)
     {
@@ -399,10 +399,12 @@ void sendDataOverWiFi()
 
     data += "}}\n";
 
-    client.print(data);
+    if(USEWIFI) client.print(data);
 
     // For debugging, print the JSON to serial
-    Serial.println("Sent JSON data:");
+    // Serial.println("Sent JSON data:");
+    Serial.print(millis());
+    Serial.print(": ");
     Serial.println(data);
 }
 
@@ -623,7 +625,7 @@ void DWM3000Class::init()
 
     // preamble detection timeout
     uint32_t regval = read(0x06, 0x04) & 0xFFFF0000;
-    regval += 65535; // max timeout ~250ms
+    regval += 15535; // max timeout ~250ms
     write(0x06, 0x04, regval);
 
     // LEDs
@@ -776,7 +778,7 @@ void DWM3000Class::writeSysConfig()
 void DWM3000Class::configureAsTX()
 {
     write(RF_CONF_REG, 0x1C, 0x34);
-    write(GEN_CFG_AES_HIGH_REG, 0x0C, 0xFEFEFEFE); // transmit power
+    write(GEN_CFG_AES_HIGH_REG, 0x0C, 0xFFFFFFFF); // transmit power
 }
 
 void DWM3000Class::setupGPIO()
@@ -1610,6 +1612,8 @@ void loop()
                 }
                 else if (DWM3000.ds_getStage() != 2)
                 {
+                    Serial.print(millis());
+                    Serial.print(": ");
                     Serial.print("[WARNING] Unexpected stage from Anchor ");
                     Serial.print(currentAnchorId);
                     Serial.print(": ");
@@ -1624,6 +1628,8 @@ void loop()
             }
             else
             {
+                Serial.print(millis());
+                Serial.print(": ");
                 Serial.print("[ERROR] Receiver Error stage 2 from Anchor ");
                 Serial.println(currentAnchorId);
                 DWM3000.clearSystemStatus();
@@ -1670,15 +1676,19 @@ void loop()
             }
             else
             {
+                Serial.print(millis());
+                Serial.print(": ");
                 Serial.print("[ERROR] Receiver Error stage 3 from Anchor ");
                 Serial.println(currentAnchorId);
                 DWM3000.clearSystemStatus();
                 curr_stage = 0;
             }
         }else{
-            if(millis() - sentmillis > 500){
+            if(millis() - sentmillis > 100){
                 DWM3000.clearSystemStatus();
                 curr_stage = 0;
+                Serial.print(millis());
+                Serial.print(": ");
                 Serial.println("RX timeout");
             }
         }
@@ -1700,12 +1710,12 @@ void loop()
     }
 
         // Print current distances
-        printAllDistances();
+        // printAllDistances();
 
         // Send data over WiFi if all anchors have valid data
-        if (USEWIFI && allAnchorsHaveValidData())
+        if (allAnchorsHaveValidData())
         {
-            sendDataOverWiFi();
+            sendData();
         }
 
         // Switch to next anchor

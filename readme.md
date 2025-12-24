@@ -1,11 +1,18 @@
 # 12UL next gen UWB tracking
 
-### Developing a multi tag UWB realtime tracking system around the Qorvo DWM3000EVB for potential use in future 12Urenloop editions.
+### Developing a multi tag UWB realtime tracking system around the Qorvo DW3000 platform for potential use in future 12Urenloop editions.
 
 ## Goals
 - [x] Ranging between 2 modules
-- [ ] Improving range (ideally ~30 meters)
-- [ ] Multi Tag (this is a big one!)
+- [x] Improving range (ideally ~30 meters)
+- [ ] Multi Tag multi Anchor (this is a big one!)
+    - [ ] Rewrite tag and anchor
+    - [ ] Test SSTWR (single side two way ranging)
+    - [ ] Timing / power measurements
+    - [ ] Design multi tag method
+    - [ ] Implement multi tag method
+    - [ ] Testing
+    - [ ] precision / reliability / throughput / latency measurements
 - [ ] Triangulation
 
 

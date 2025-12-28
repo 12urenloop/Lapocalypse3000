@@ -325,7 +325,7 @@ private:
     static int checkForDevID();
 };
 
-DWM3000Class DWM3000;
+DWM3000Class dwm;
 
 // WiFi Functions
 void connectToWiFi()
@@ -387,7 +387,7 @@ void sendData()
         data += "\"fp_rssi\":" + String(anchors[i].fp_signal_strength, 2) + ",";
         data += "\"round_time\":" + String(anchors[i].t_roundA) + ",";
         data += "\"reply_time\":" + String(anchors[i].t_replyA) + ",";
-        data += "\"clock_offset\":" + String((double)DWM3000.getClockOffset(anchors[i].clock_offset), 6);
+        data += "\"clock_offset\":" + String((double)dwm.getClockOffset(anchors[i].clock_offset), 6);
         data += "}";
 
         // Add comma if not the last anchor
@@ -489,10 +489,10 @@ void printDebugInfo(int anchor, long long rx, long long tx, int t_round, int t_r
     Serial.print("Clock offset: ");
     Serial.println(clock_offset);
 
-    int ranging_time = DWM3000.ds_processRTInfo(t_round, t_reply,
-                                                DWM3000.read(0x12, 0x04), DWM3000.read(0x12, 0x08), clock_offset);
+    int ranging_time = dwm.ds_processRTInfo(t_round, t_reply,
+                                                dwm.read(0x12, 0x04), dwm.read(0x12, 0x08), clock_offset);
     Serial.print("Calculated distance: ");
-    Serial.println(DWM3000.convertToCM(ranging_time));
+    Serial.println(dwm.convertToCM(ranging_time));
 }
 
 void printAllDistances()
@@ -505,13 +505,13 @@ void printAllDistances()
         Serial.print(": ");
         if (anchors[i].filtered_distance > 0)
         {
-            DWM3000.printDouble(anchors[i].filtered_distance, 100, false);
+            dwm.printDouble(anchors[i].filtered_distance, 100, false);
             Serial.print(" cm");
         }
         else
         {
             Serial.print("INVALID - ");
-            DWM3000.printDouble(anchors[i].filtered_distance, 100, false);
+            dwm.printDouble(anchors[i].filtered_distance, 100, false);
         }
 
         if (i < NUM_ANCHORS - 1)
@@ -1456,46 +1456,46 @@ void setup()
     if(USEWIFI) connectToWiFi();
 
     // Initialize UWB
-    DWM3000.begin();
-    DWM3000.hardReset();
+    dwm.begin();
+    dwm.hardReset();
     delay(200);
 
-    if (!DWM3000.checkSPI())
+    if (!dwm.checkSPI())
     {
         Serial.println("[ERROR] Could not establish SPI Connection to DWM3000!");
         while (1)
             ;
     }
 
-    while (!DWM3000.checkForIDLE())
+    while (!dwm.checkForIDLE())
     {
         Serial.println("[ERROR] IDLE1 FAILED\r");
         delay(1000);
     }
 
-    DWM3000.softReset();
+    dwm.softReset();
     delay(200);
 
-    if (!DWM3000.checkForIDLE())
+    if (!dwm.checkForIDLE())
     {
         Serial.println("[ERROR] IDLE2 FAILED\r");
         while (1)
             ;
     }
 
-    DWM3000.init();
-    DWM3000.setupGPIO();
-    DWM3000.setTXAntennaDelay(16350);
-    DWM3000.setSenderID(TAG_ID);
+    dwm.init();
+    dwm.setupGPIO();
+    dwm.setTXAntennaDelay(16350);
+    dwm.setSenderID(TAG_ID);
 
     Serial.println("> TAG - Three Anchor Ranging System <");
     Serial.println("> With WiFi Communication <\n");
     Serial.println("[INFO] Setup is finished.");
     Serial.print("Antenna delay set to: ");
-    Serial.println(DWM3000.getTXAntennaDelay());
+    Serial.println(dwm.getTXAntennaDelay());
 
-    DWM3000.configureAsTX();
-    DWM3000.clearSystemStatus();
+    dwm.configureAsTX();
+    dwm.clearSystemStatus();
 }
 
 void handleCommand(const String& cmd) {
@@ -1516,7 +1516,7 @@ void handleCommand(const String& cmd) {
         int offset = cmd.substring(secondSpace + 1).toInt();
 
         // readRegisterBytes(reg, offset, buffer, numBytes);
-        uint32_t value = DWM3000.read(reg, offset);
+        uint32_t value = dwm.read(reg, offset);
 
         // Send bytes back
         client.write((uint8_t*)&value, sizeof(value));
@@ -1531,7 +1531,7 @@ void handleCommand(const String& cmd) {
 
         uint32_t data = cmd.substring(thirdSpace + 1).toInt();
 
-        DWM3000.write(reg, offset, data);
+        dwm.write(reg, offset, data);
         client.write("set OK");
     }else if(action == "otp"){
         if (firstSpace < 0) {
@@ -1542,7 +1542,7 @@ void handleCommand(const String& cmd) {
         int addr    = cmd.substring(firstSpace + 1).toInt();
 
         // readRegisterBytes(reg, offset, buffer, numBytes);
-        uint32_t value = DWM3000.readOTP(addr);
+        uint32_t value = dwm.readOTP(addr);
 
         // Send bytes back
         client.write((uint8_t*)&value, sizeof(value));
@@ -1588,37 +1588,37 @@ void loop()
         currentAnchor->t_roundA = 0;
         currentAnchor->t_replyA = 0;
 
-        DWM3000.setDestinationID(currentAnchorId);
-        DWM3000.ds_sendFrame(1);
-        currentAnchor->tx = DWM3000.readTXTimestamp();
+        dwm.setDestinationID(currentAnchorId);
+        dwm.ds_sendFrame(1);
+        currentAnchor->tx = dwm.readTXTimestamp();
         curr_stage = 1;
         sentmillis = millis();
         break;
 
     case 1: // Await first response
-        if (rx_status = DWM3000.receivedFrameSucc())
+        if (rx_status = dwm.receivedFrameSucc())
         {
-            DWM3000.clearSystemStatus();
+            dwm.clearSystemStatus();
             if (rx_status == 1)
             {
-                if (DWM3000.ds_isErrorFrame())
+                if (dwm.ds_isErrorFrame())
                 {
                     Serial.print("[WARNING] Error frame from Anchor ");
                     Serial.print(currentAnchorId);
                     Serial.print("! Signal strength: ");
-                    Serial.print(DWM3000.getSignalStrength());
+                    Serial.print(dwm.getSignalStrength());
                     Serial.println(" dBm");
                     curr_stage = 0;
                 }
-                else if (DWM3000.ds_getStage() != 2)
+                else if (dwm.ds_getStage() != 2)
                 {
                     Serial.print(millis());
                     Serial.print(": ");
                     Serial.print("[WARNING] Unexpected stage from Anchor ");
                     Serial.print(currentAnchorId);
                     Serial.print(": ");
-                    Serial.println(DWM3000.ds_getStage());
-                    DWM3000.ds_sendErrorFrame();
+                    Serial.println(dwm.ds_getStage());
+                    dwm.ds_sendErrorFrame();
                     curr_stage = 0;
                 }
                 else
@@ -1632,7 +1632,7 @@ void loop()
                 Serial.print(": ");
                 Serial.print("[ERROR] Receiver Error stage 2 from Anchor ");
                 Serial.println(currentAnchorId);
-                DWM3000.clearSystemStatus();
+                dwm.clearSystemStatus();
                 curr_stage = 0;
             }
         }else{
@@ -1645,11 +1645,11 @@ void loop()
         break;
 
     case 2: // Response received. Send second ranging
-        currentAnchor->rx = DWM3000.readRXTimestamp();
-        DWM3000.ds_sendFrame(3);
+        currentAnchor->rx = dwm.readRXTimestamp();
+        dwm.ds_sendFrame(3);
 
         currentAnchor->t_roundA = currentAnchor->rx - currentAnchor->tx;
-        currentAnchor->tx = DWM3000.readTXTimestamp();
+        currentAnchor->tx = dwm.readTXTimestamp();
         currentAnchor->t_replyA = currentAnchor->tx - currentAnchor->rx;
         sentmillis = millis();
 
@@ -1657,12 +1657,12 @@ void loop()
         break;
 
     case 3: // Await second response
-        if (rx_status = DWM3000.receivedFrameSucc())
+        if (rx_status = dwm.receivedFrameSucc())
         {
-            DWM3000.clearSystemStatus();
+            dwm.clearSystemStatus();
             if (rx_status == 1)
             {
-                if (DWM3000.ds_isErrorFrame())
+                if (dwm.ds_isErrorFrame())
                 {
                     Serial.print("[WARNING] Error frame from Anchor ");
                     Serial.println(currentAnchorId);
@@ -1670,7 +1670,7 @@ void loop()
                 }
                 else
                 {
-                    currentAnchor->clock_offset = DWM3000.getRawClockOffset();
+                    currentAnchor->clock_offset = dwm.getRawClockOffset();
                     curr_stage = 4;
                 }
             }
@@ -1680,12 +1680,12 @@ void loop()
                 Serial.print(": ");
                 Serial.print("[ERROR] Receiver Error stage 3 from Anchor ");
                 Serial.println(currentAnchorId);
-                DWM3000.clearSystemStatus();
+                dwm.clearSystemStatus();
                 curr_stage = 0;
             }
         }else{
             if(millis() - sentmillis > 100){
-                DWM3000.clearSystemStatus();
+                dwm.clearSystemStatus();
                 curr_stage = 0;
                 Serial.print(millis());
                 Serial.print(": ");
@@ -1696,16 +1696,16 @@ void loop()
 
     case 4: // Response received. Calculating results
     {
-        int ranging_time = DWM3000.ds_processRTInfo(
+        int ranging_time = dwm.ds_processRTInfo(
             currentAnchor->t_roundA,
             currentAnchor->t_replyA,
-            DWM3000.read(0x12, 0x04), // reading receive buffer
-            DWM3000.read(0x12, 0x08),
+            dwm.read(0x12, 0x04), // reading receive buffer
+            dwm.read(0x12, 0x08),
             currentAnchor->clock_offset); // time of flight in clock pulses
 
-        currentAnchor->distance = DWM3000.convertToCM(ranging_time);
-        currentAnchor->signal_strength = DWM3000.getSignalStrength();
-        currentAnchor->fp_signal_strength = DWM3000.getFirstPathSignalStrength();
+        currentAnchor->distance = dwm.convertToCM(ranging_time);
+        currentAnchor->signal_strength = dwm.getSignalStrength();
+        currentAnchor->fp_signal_strength = dwm.getFirstPathSignalStrength();
         updateFilteredDistance(*currentAnchor);
     }
 

@@ -2,11 +2,13 @@
 
 #include <Arduino.h>
 #include "dw3000_vals_old.h"
+#include "dw3000_macros.h"
 #include <SPI.h>
 
 #ifndef DEBUG_OUTPUT
 #define DEBUG_OUTPUT 0
 #endif
+
 
 
 
@@ -85,9 +87,12 @@ public:
     unsigned long long readTXTimestamp();
 
     // Chip Interaction
+    uint32_t writereg(int registerID, uint32_t data, int data_len);
     uint32_t write(int base, int sub, uint32_t data, int data_len);
+    uint32_t write(int registerID, uint32_t data);
     uint32_t write(int base, int sub, uint32_t data);
 
+    uint32_t read(int registerID);
     uint32_t read(int base, int sub);
     uint8_t read8bit(int base, int sub);
     uint32_t readOTP(uint8_t addr);
@@ -122,8 +127,11 @@ public:
 
 private:
     // Single Bit Settings
+    void setBit(int registerID, int shift, bool b);
     void setBit(int reg_addr, int sub_addr, int shift, bool b);
+    void setBitLow(int registerID, int shift);
     void setBitLow(int reg_addr, int sub_addr, int shift);
+    void setBitHigh(int registerID, int shift);
     void setBitHigh(int reg_addr, int sub_addr, int shift);
 
     // Fast Commands
@@ -192,7 +200,7 @@ void DWM3000Class::init()
         return;
     }
 
-    setBitHigh(GEN_CFG_AES_LOW_REG, 0x10, 4);
+    setBitHigh(SYS_CFG_ID, 4);
 
     while (!checkForIDLE())
     {
@@ -793,7 +801,7 @@ int DWM3000Class::getDestinationID()
  */
 bool DWM3000Class::checkForIDLE()
 {
-    return (read(0x0F, 0x30) >> 16 & PMSC_STATE_IDLE) == PMSC_STATE_IDLE || (read(0x00, 0x44) >> 16 & (SPIRDY_MASK | RCINIT_MASK)) == (SPIRDY_MASK | RCINIT_MASK) ? 1 : 0;
+    return (read(SYS_STATE_LO_ID) >> 16 & PMSC_STATE_IDLE) == PMSC_STATE_IDLE || (read(SYS_STATUS_ID) >> 16 & (SPIRDY_MASK | RCINIT_MASK)) == (SPIRDY_MASK | RCINIT_MASK) ? 1 : 0;
 }
 
 /*
@@ -964,6 +972,13 @@ unsigned long long DWM3000Class::readTXTimestamp()
     return tx_timestamp;
 }
 
+uint32_t DWM3000Class::writereg(int registerID, uint32_t data, int dataLen){
+    uint8_t base = (registerID >> 16) & 0xFF;
+    uint8_t sub = registerID & 0xFF;
+    return readOrWriteFullAddress(base, sub, data, dataLen, 1);
+}
+
+
 /*
  #####  Chip Interaction  #####
 */
@@ -981,6 +996,12 @@ uint32_t DWM3000Class::write(int base, int sub, uint32_t data, int dataLen)
     return readOrWriteFullAddress(base, sub, data, dataLen, 1);
 }
 
+uint32_t DWM3000Class::write(int registerID, uint32_t data){
+    uint8_t base = (registerID >> 16) & 0xFF;
+    uint8_t sub = registerID & 0xFF;
+    return write(base, sub, data);
+}
+
 /*
  Writes to a specific chip register address and automatically determines the dataLen parameter
  @param base The chips base register address
@@ -991,6 +1012,13 @@ uint32_t DWM3000Class::write(int base, int sub, uint32_t data, int dataLen)
 uint32_t DWM3000Class::write(int base, int sub, uint32_t data)
 {
     return readOrWriteFullAddress(base, sub, data, 0, 1);
+}
+
+uint32_t DWM3000Class::read(int registerID)
+{
+    uint8_t base = (registerID >> 16) & 0xFF;
+    uint8_t sub = registerID & 0xFF;
+    return read(base, sub);
 }
 
 /*
@@ -1151,15 +1179,15 @@ void DWM3000Class::softReset()
 {
     clearAONConfig();
 
-    write(PMSC_REG, 0x04, 0x1); // force clock to FAST_RC/4 clock
+    write(CLK_CTRL_ID, 0x1); // force clock to FAST_RC/4 clock
 
-    write(PMSC_REG, 0x00, 0x00, 2); // init reset
+    writereg(SOFT_RST_ID, 0x00, 2); // init reset
 
     delay(100);
 
-    write(PMSC_REG, 0x00, 0xFFFF); // return back
+    write(SOFT_RST_ID, 0xFFFF); // return back
 
-    write(PMSC_REG, 0x04, 0x00, 1); // set clock back to Auto mode
+    write(CLK_CTRL_ID, 0x00, 1); // set clock back to Auto mode
 }
 
 /*
@@ -1309,6 +1337,11 @@ void DWM3000Class::printDouble(double val, unsigned int precision, bool linebrea
  #####  Single Bit Settings  #####
 */
 
+void DWM3000Class::setBit(int registerID, int shift, bool b)
+{
+    setBit(REGBASE(registerID), REGSUB(registerID), shift, b);
+}
+
 /*
  Set bit in a defined register address
  @param reg_addr The registers base address
@@ -1328,6 +1361,11 @@ void DWM3000Class::setBit(int reg_addr, int sub_addr, int shift, bool b)
         bitClear(tmpByte, shift);
     }
     write(reg_addr, sub_addr, tmpByte);
+}
+
+void DWM3000Class::setBitHigh(int registerID, int shift)
+{
+    setBit(REGBASE(registerID), REGSUB(registerID), shift, 1);
 }
 
 /*
@@ -1551,7 +1589,7 @@ unsigned int DWM3000Class::countBits(unsigned int number)
 */
 int DWM3000Class::checkForDevID()
 {
-    int res = read(GEN_CFG_AES_LOW_REG, NO_OFFSET);
+    int res = read(DEV_ID_ID);
     if (res != 0xDECA0302 && res != 0xDECA0312)
     {
         Serial.println("[ERROR] DEV_ID IS WRONG!");

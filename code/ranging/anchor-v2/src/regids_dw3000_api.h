@@ -3,8 +3,8 @@
 #include <Arduino.h>
 #include "dw3000_vals_old.h"
 #include "dw3000_macros.h"
-#include <SPI.h>
 #include "dw3000_registers.h"
+#include <SPI.h>
 
 #ifndef DEBUG_OUTPUT
 #define DEBUG_OUTPUT 0

@@ -1,13 +1,4 @@
-/**
- * @file      dw3000_deca_regs.h
- *
- * @brief     DW3000 Register Definitions
- *            This file supports Assembly and C development for DW3000 enabled devices
- *
- * @copyright SPDX-FileCopyrightText: Copyright (c) 2024 Qorvo US, Inc.
- *            SPDX-License-Identifier: LicenseRef-QORVO-2
- *
- */
+
 #ifndef DECA_REGS_DW3000_H
 #define DECA_REGS_DW3000_H
 

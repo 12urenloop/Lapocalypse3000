@@ -8,6 +8,15 @@ extern "C"
 #endif
 
 
+// extra registers that are in the manual but not in this file for some reason:
+
+#define RF_TX_CTRL_ID           0x07001AUL
+#define RF_TX_CTRL_2_ID         0x07001CUL
+#define RX_CAL_STS_ID           0x040020UL
+
+
+//
+
 /******************************************************************************
  * @brief Bit definitions for register DEV_ID
  **/

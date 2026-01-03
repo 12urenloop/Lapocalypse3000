@@ -243,7 +243,7 @@ void DWM3000Class::init()
 
     writeSysConfig();
 
-    write(0x00, 0x3C, 0xFFFFFFFF); // Set Status Enable
+    write(SYS_ENABLE_LO_ID, 0xFFFFFFFF); // Set Status Enable
     write(SYS_ENABLE_HI_ID, 0xFFFF);
 
     write(AON_DIG_CFG_ID, 0x000900, 3); // AON_DIG_CFG register setup; sets up auto-rx calibration and on-wakeup GO2IDLE  //0xA
@@ -281,10 +281,11 @@ void DWM3000Class::init()
      * Things to do as documented in https://gist.github.com/egnor/455d510e11c22deafdec14b09da5bf54
      */
     write(LDO_CTRL_ID, 0x14);       // LDO_RLOAD to 0x14 //0x7
-    write(0x07, 0x1A, 0x0E);       // RF_TX_CTRL_1 to 0x0E
+    write(RF_TX_CTRL_ID, 0x0E);       // RF_TX_CTRL_1 to 0x0E
     write(TX_CTRL_HI_ID, 0x1C071134); // RF_TX_CTRL_2 to 0x1C071134 (due to channel 5, else (9) to 0x1C010034)
     write(PLL_CFG_ID, 0x1F3C);     // PLL_CFG to 0x1F3C (due to channel 5, else (9) to 0x0F3C)  //0x9
-    write(0x09, 0x80, 0x81);       // PLL_CAL config to 0x81
+    // write(0x09, 0x80, 0x81);       // mistake? no register at 09:80
+    write(PLL_CAL_ID, 0x81);       // this is what i think was meant: set optimal PLL calibration config value
 
     write(CLK_CTRL_ID, 0xB40200);
 
@@ -413,22 +414,22 @@ void DWM3000Class::writeSysConfig()
     if (this->config.channel)
         otp_val |= 0x2000;
 
-    write(OTP_IF_REG, 0x08, otp_val);
+    write(OTP_CFG_ID, otp_val);
 
     write(RX_TUNE_REG, 0x19, 0xF0);
 
-    int ldo_ctrl_val = read(RF_CONF_REG, 0x48); // Save original LDO_CTRL data
+    int ldo_ctrl_val = read(LDO_CTRL_ID); // Save original LDO_CTRL data
     int tmp_ldo = (0x105 | 0x100 | 0x4 | 0x1);
 
-    write(RF_CONF_REG, 0x48, tmp_ldo);
+    write(LDO_CTRL_ID, tmp_ldo);
 
-    write(EXT_SYNC_REG, 0x0C, 0x020000); // Calibrate RX
+    write(RX_CAL_CFG_ID, 0x020000); // Calibrate RX
 
     int l = read(0x04, 0x0C);
 
     delay(20);
 
-    write(EXT_SYNC_REG, 0x0C, 0x11); // Enable calibration
+    write(RX_CAL_CFG_ID, 0x11); // Enable calibration
 
     int succ = 0;
     for (int i = 0; i < 100; i++)
@@ -450,8 +451,8 @@ void DWM3000Class::writeSysConfig()
         Serial.println("[ERROR] PGF calibration failed!");
     }
 
-    write(EXT_SYNC_REG, 0x0C, 0x00);
-    write(EXT_SYNC_REG, 0x20, 0x01);
+    write(RX_CAL_CFG_ID, 0x00);
+    write(RX_CAL_STS_ID, 0x01);
 
     int rx_cal_res = read(EXT_SYNC_REG, 0x14);
     if (rx_cal_res == 0x1fffffff)
@@ -464,9 +465,9 @@ void DWM3000Class::writeSysConfig()
         Serial.println("[ERROR] PGF_CAL failed in stage Q!");
     }
 
-    write(RF_CONF_REG, 0x48, ldo_ctrl_val); // Restore original LDO_CTRL data
+    write(LDO_CTRL_ID, ldo_ctrl_val); // Restore original LDO_CTRL data
 
-    write(0x0E, 0x02, 0x01); // Enable full CIA diagnostics to get signal strength information
+    write(CIA_CONF_ID + 2, 0x01); // Enable full CIA diagnostics to get signal strength information
 
     setTXAntennaDelay(this->config.antennaDelay); // set default antenna delay
 }
@@ -476,8 +477,8 @@ void DWM3000Class::writeSysConfig()
 */
 void DWM3000Class::configureAsTX()
 {
-    write(RF_CONF_REG, 0x1C, 0x34);                // write pg_delay
-    write(GEN_CFG_AES_HIGH_REG, 0x0C, 0xFFFFFFFF); // transmit power
+    write(RF_TX_CTRL_2_ID, 0x34);                // write pg_delay
+    write(TX_POWER_ID, 0xFFFFFFFF); // transmit power
 }
 
 /*
@@ -500,9 +501,9 @@ void DWM3000Class::setupGPIO()
 void DWM3000Class::ds_sendFrame(int stage, int senderID, int destinationID)
 {
     setMode(1);
-    write(0x14, 0x01, senderID & 0xFF);
-    write(0x14, 0x02, destinationID & 0xFF);
-    write(0x14, 0x03, stage & 0x7);
+    write(TX_BUFFER_REG, 0x1, senderID & 0xFF);
+    write(TX_BUFFER_REG, 0x2, destinationID & 0xFF);
+    write(TX_BUFFER_REG, 0x3, stage & 0x7);
     setFrameLength(4);
 
     TXInstantRX(); // Await response
@@ -530,12 +531,11 @@ void DWM3000Class::ds_sendFrame(int stage, int senderID, int destinationID)
 void DWM3000Class::ds_sendRTInfo(int t_roundB, int t_replyB, int destinationID, int senderID)
 {
     setMode(1);
-    write(0x14, 0x01, destinationID & 0xFF);
-    write(0x14, 0x02, senderID & 0xFF);
-    write(0x14, 0x03, 4);
-    write(0x14, 0x04, t_roundB);
-    write(0x14, 0x08, t_replyB);
-
+    write(TX_BUFFER_REG, 0x1, destinationID & 0xFF);
+    write(TX_BUFFER_REG, 0x2, senderID & 0xFF);
+    write(TX_BUFFER_REG, 0x3, 4);
+    write(TX_BUFFER_REG, 0x4, t_roundB);
+    write(TX_BUFFER_REG, 0x8, t_replyB);
     setFrameLength(12);
 
     TXInstantRX();
@@ -695,7 +695,7 @@ void DWM3000Class::setPHRRate(uint8_t data)
 */
 void DWM3000Class::setMode(int mode)
 {
-    write(0x14, 0x00, mode & 0x7);
+    write(TX_BUFFER_REG, 0x0, mode & 0x7);
 }
 
 /*
@@ -728,7 +728,7 @@ void DWM3000Class::setFrameLength(int frameLen)
     }
     int tmp_cfg = (curr_cfg & 0xFFFFFC00) | frameLen;
 
-    write(GEN_CFG_AES_LOW_REG, 0x24, tmp_cfg);
+    write(TX_FCTRL_ID, tmp_cfg);
 }
 
 /*
@@ -940,7 +940,7 @@ float DWM3000Class::getTempInC()
     int otp_temp = readOTP(0x09) & 0xFF;
     float tmp = (float)((res - otp_temp) * 1.05f) + 22.0f;
 
-    write(SAR_CTRL_ID, 0x00, 1); // Reset poll enable
+    write(SAR_CTRL_ID, 1); // Reset poll enable
 
     return tmp;
 }
@@ -1056,8 +1056,8 @@ uint8_t DWM3000Class::read8bit(int base, int sub)
  */
 uint32_t DWM3000Class::readOTP(uint8_t addr)
 {
-    write(OTP_IF_REG, 0x04, addr);
-    write(OTP_IF_REG, 0x08, 0x02);
+    write(OTP_ADDR_ID, addr);
+    write(OTP_CFG_ID, 0x02);
 
     return read(OTP_IF_REG, 0x10);
 }
@@ -1115,9 +1115,9 @@ void DWM3000Class::prepareDelayedTX(int senderID, int destinationID)
       * 7 - Error
       */
 
-    write(0x14, 0x01, senderID & 0xFF);
-    write(0x14, 0x02, destinationID & 0xFF);
-    write(0x14, 0x03, reply_delay); // set frame content
+    write(TX_BUFFER_REG, 0x01, senderID & 0xFF);
+    write(TX_BUFFER_REG, 0x02, destinationID & 0xFF);
+    write(TX_BUFFER_REG, 0x03, reply_delay); // set frame content
 
     setFrameLength(7); // Control Byte (1 Byte) + Sender ID (1 Byte) + Dest. ID (1 Byte) + Reply Delay (4 Bytes) = 7 Bytes
 
@@ -1207,7 +1207,7 @@ void DWM3000Class::hardReset()
 */
 void DWM3000Class::clearSystemStatus()
 {
-    write(GEN_CFG_AES_LOW_REG, 0x44, 0x3F7FFFFF);
+    write(SYS_STATUS_ID, 0x3F7FFFFF);
 }
 
 /*

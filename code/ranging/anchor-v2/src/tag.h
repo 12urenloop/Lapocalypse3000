@@ -492,7 +492,7 @@ void setup()
     dwm.configureAsTX();
     dwm.clearSystemStatus();
 
-    diagnostic();
+    // diagnostic();
 }
 
 void handleCommand(const String& cmd) {

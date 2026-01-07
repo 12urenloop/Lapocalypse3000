@@ -12,9 +12,12 @@ extern "C"
 
 #define RF_TX_CTRL_ID           0x07001AUL
 #define RF_TX_CTRL_2_ID         0x07001CUL
-#define RX_CAL_STS_ID           0x040020UL
 #define PRE_TOC_ID              0x060004UL
-
+#define RX_SFD_TOC_ID           0x060002UL
+#define AON_CFG_ID              0x0A0014UL
+#define DRX_CAR_INT_ID          0x060029UL
+#define IP_TS_ID                0x0C0000UL
+#define TX_TIME_HI_ID           0x000078UL
 
 //
 

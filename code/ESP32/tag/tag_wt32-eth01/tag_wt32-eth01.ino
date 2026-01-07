@@ -1308,6 +1308,17 @@ void DWM3000Class::writeFastCommand(int cmd)
 
 uint32_t DWM3000Class::readOrWriteFullAddress(uint32_t base, uint32_t sub, uint32_t data, uint32_t dataLen, uint32_t readWriteBit)
 {
+    if(false 
+        || (base == 0x4 && sub >= 0 && sub <= 4)
+        || (base == 0x5 && sub >= 0x04 && sub <= 0x08)
+        || (base == 0x6 && sub >= 0 && sub <= 8)
+        || (base == 0x4 && sub >= 0 && sub <= 4)
+    ){
+        Serial.print("WRITE ");
+        Serial.printf("%02x:%02x = %#010x\n", base, sub, data);
+    }
+
+
     uint32_t header = 0x00;
     if (readWriteBit)
         header = header | 0x80;
@@ -1496,6 +1507,8 @@ void setup()
 
     dwm.configureAsTX();
     dwm.clearSystemStatus();
+
+    // diagnostic();
 }
 
 void handleCommand(const String& cmd) {
@@ -1557,6 +1570,15 @@ void handleCommand(const String& cmd) {
 }
 
 unsigned long sentmillis = 0;
+
+void diagnostic(){
+    for(int base = 0; base <= 10; base++){
+        for(int sub = 0; sub <= 0x68; sub += 4){
+            int result = dwm.read(base, sub);
+            Serial.printf("%02x:%02x = %#010x\n", base, sub, result);
+        }
+    }
+}
 
 void loop()
 {

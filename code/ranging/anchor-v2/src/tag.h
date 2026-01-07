@@ -4,7 +4,7 @@
 #include <WiFiClient.h>
 
 #include "dw3000_registers.h"
-#include "dw3000_api.h"
+#include "regids_dw3000_api.h"
 
 #define HSPI 2  // 2 for S2 and S3, 1 for S1
 #define VSPI 3
@@ -149,7 +149,7 @@ DWM3000Class::Config config = {
     CHANNEL_5,         // Channel
     PREAMBLE_4096,     // Preamble Length
     9,                 // Preamble Code (Same for RX and TX!)
-    PAC8,              // PAC
+    PAC16,              // PAC
     DATARATE_850KB,    // Datarate
     PHR_MODE_STANDARD, // PHR Mode
     PHR_RATE_850KB     // PHR Rate
@@ -422,6 +422,14 @@ void printAllDistances()
     Serial.println();
 }
 
+void diagnostic(){
+    for(int base = 0; base <= 10; base++){
+        for(int sub = 0; sub <= 0x68; sub += 4){
+            int result = dwm.read(base, sub);
+            Serial.printf("%02x:%02x = %#010x\n", base, sub, result);
+        }
+    }
+}
 
 void setup()
 {
@@ -483,6 +491,8 @@ void setup()
 
     dwm.configureAsTX();
     dwm.clearSystemStatus();
+
+    diagnostic();
 }
 
 void handleCommand(const String& cmd) {

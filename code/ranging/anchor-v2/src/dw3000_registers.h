@@ -13,6 +13,7 @@ extern "C"
 #define RF_TX_CTRL_ID           0x07001AUL
 #define RF_TX_CTRL_2_ID         0x07001CUL
 #define RX_CAL_STS_ID           0x040020UL
+#define PRE_TOC_ID              0x060004UL
 
 
 //

@@ -297,9 +297,9 @@ void DWM3000Class::init()
     // write(0x06, 0x02, 2048 +  1 - 8 + 8); // preamble length + 1 – PAC size + SFD length.
 
     // // preamble detection timeout
-    // uint32_t regval = read(0x06, 0x04) & 0xFFFF0000;
-    // // regval += 65535; // max timeout ~250ms, only uncomment if you don't want the receiver on until receiving a frame
-    // write(0x06, 0x04, regval);
+    uint32_t regval = read(PRE_TOC_ID) & 0xFFFF0000;
+    regval += 15535; // max timeout ~250ms
+    write(PRE_TOC_ID, regval);
 
     // LEDs
     write(GPIO_MODE_ID, 0b001001001001001001001001001); // turn on all led GPIOs
@@ -1434,6 +1434,16 @@ void DWM3000Class::writeFastCommand(int cmd)
 */
 uint32_t DWM3000Class::readOrWriteFullAddress(uint32_t base, uint32_t sub, uint32_t data, uint32_t dataLen, uint32_t readWriteBit)
 {
+    if(false 
+        || (base == 0x4 && sub >= 0 && sub <= 4)
+        || (base == 0x5 && sub >= 0x04 && sub <= 0x08)
+        || (base == 0x6 && sub >= 0 && sub <= 8)
+        || (base == 0x4 && sub >= 0 && sub <= 4)
+    ){
+        Serial.print("WRITE ");
+        Serial.printf("%02x:%02x = %#010x\n", base, sub, data);
+    }
+
     uint32_t header = 0x00;
 
     if (readWriteBit)

@@ -18,35 +18,37 @@ int retry_count = 0;
 
 // WiFi Configuration
 #include "wificonfig.h"
-#define USEWIFI false
+#define USEWIFI true
 
 const int port = 7007;             // Choose a port number
 WiFiClient client;
 bool wifiConnected = false;
 
 //ESP32 WROOM
-const int HSPI_MISO = 19;
-const int HSPI_MOSI = 23;
-const int HSPI_SCLK = 18;
-const int HSPI_SS = 4;
+// const int HSPI_MISO = 19;
+// const int HSPI_MOSI = 23;
+// const int HSPI_SCLK = 18;
+// const int HSPI_SS = 4;
 
-const int VSPI_MISO = 19;
-const int VSPI_MOSI = 23;
-const int VSPI_SCLK = 18;
-const int VSPI_SS = 4;
-#define CHIP_SELECT_PIN 4 // ESP32 WROOM
+// const int VSPI_MISO = 19;
+// const int VSPI_MOSI = 23;
+// const int VSPI_SCLK = 18;
+// const int VSPI_SS = 4;
+// #define CHIP_SELECT_PIN 4 // ESP32 WROOM
 
 //WT32-ETH01
-// const int HSPI_MISO = 15;
-// const int HSPI_MOSI = 12;
-// const int HSPI_SCLK = 14;
-// const int HSPI_SS = 5;
+const int HSPI_MISO = 15;
+const int HSPI_MOSI = 12;
+const int HSPI_SCLK = 14;
+const int HSPI_SS = 5;
 
-// const int VSPI_MISO = 15;
-// const int VSPI_MOSI = 12;
-// const int VSPI_SCLK = 14;
-// const int VSPI_SS = 5;
-// #define CHIP_SELECT_PIN 5 // WT32-ETH01
+const int VSPI_MISO = 15;
+const int VSPI_MOSI = 12;
+const int VSPI_SCLK = 14;
+const int VSPI_SS = 5;
+#define CHIP_SELECT_PIN 5 // WT32-ETH01
+#define RST_PIN 17
+
 
 
 
@@ -1794,6 +1796,7 @@ void resetRadio()
 void setup()
 {
   Serial.begin(115200);
+  Serial.println("anchor starting");
   dwm.begin();
   dwm.hardReset();
   delay(200);
@@ -1959,7 +1962,7 @@ void loop()
           }
           else if (dwm.ds_getStage() != 1)
           {
-            Serial.print("[WARNING] Unexpected stage: ");
+            Serial.print("[WARNING] Unexpected stage, expected 1, got: ");
             Serial.println(dwm.ds_getStage());
             // DWM3000.ds_sendErrorFrame(); // turned this off experimentally
             dwm.clearSystemStatus();
@@ -2007,6 +2010,7 @@ void loop()
     t_replyB = tx - rx;
     curr_stage = 2;
     last_ranging_time = millis(); // Reset timeout timer
+    Serial.println("sent response to 1");
     break;
 
   case 2: // Awaiting response
@@ -2024,7 +2028,7 @@ void loop()
         }
         else if (dwm.ds_getStage() != 3)
         {
-          Serial.print("[WARNING] Unexpected stage: ");
+          Serial.print("[WARNING] Unexpected stage, expected 3, got: ");
           Serial.println(dwm.ds_getStage());
           // DWM3000.ds_sendErrorFrame(); // turned this off experimentally
           dwm.clearSystemStatus();

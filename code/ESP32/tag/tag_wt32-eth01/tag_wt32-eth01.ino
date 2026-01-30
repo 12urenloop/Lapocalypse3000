@@ -605,7 +605,7 @@ void DWM3000Class::init()
     int f = read(0x4, 0x20); // reads if calibration is complete
 
     // SET PAC TO 16 (0x01) reg:06:00 bits:1-0, bit 4 to 0 (00001100) (0xC)
-    write(0x6, 0x0, 0x81101D);
+    write(0x06, 0x0, 0x81101D);
 
     write(0x07, 0x34, 0x4); // enable SAR temperature sensor reading
     write(0x07, 0x48, 0x14); // LDO control, what's that? something with output voltage

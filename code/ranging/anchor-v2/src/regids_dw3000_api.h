@@ -297,6 +297,7 @@ void DWM3000Class::init()
     // write(0x06, 0x02, 2048 +  1 - 8 + 8); // preamble length + 1 – PAC size + SFD length.
 
     // // preamble detection timeout
+    write(RX_SFD_TOC_ID, 0xDE81); // SFD timeout, TODO tune this
     uint32_t regval = read(PRE_TOC_ID) & 0xFFFF0000;
     regval += 15535; // max timeout ~250ms
     write(PRE_TOC_ID, regval);
@@ -361,8 +362,6 @@ void DWM3000Class::writeSysConfig()
     tx_fctrl_val ^= 1 << 10; // clear out datarate bit
     tx_fctrl_val |= (this->config.dataRate << 10);
     write(TX_FCTRL_ID, tx_fctrl_val);
-
-    write(RX_SFD_TOC_ID, 0x81);
 
     int rf_tx_ctrl_2 = 0x1C071134;
     int pll_conf = 0x0F3C;
@@ -470,6 +469,7 @@ void DWM3000Class::writeSysConfig()
     write(CIA_CONF_ID + 2, 0x01); // Enable full CIA diagnostics to get signal strength information
 
     setTXAntennaDelay(this->config.antennaDelay); // set default antenna delay
+
 }
 
 /*

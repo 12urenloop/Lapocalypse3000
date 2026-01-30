@@ -4,7 +4,7 @@
 #include <WiFiClient.h>
 
 #include "dw3000_registers.h"
-#include "dw3000_api.h"
+#include "regids_dw3000_api.h"
 
 // SPI Setup
 #define RST_PIN 27
@@ -20,9 +20,6 @@ unsigned long last_ranging_time = 0;
 #define MAX_RETRIES 3
 int retry_count = 0;
 
-// WiFi Configuration
-#include "wificonfig.h"
-#define USEWIFI false
 
 const int port = 7007;             // Choose a port number
 WiFiClient client;
@@ -345,7 +342,7 @@ void loop()
       }
       else
       {
-        Serial.println("[ERROR] Receiver Error occurred!");
+        Serial.println("[ERROR] Receiver Error occurred in stage 1!");
         dwm.clearSystemStatus();
         dwm.standardRX();
         curr_stage = 0;
@@ -404,7 +401,7 @@ void loop()
       }
       else
       {
-        Serial.println("[ERROR] Receiver Error occurred!");
+        Serial.println("[ERROR] Receiver Error occurred in stage 2!");
         dwm.clearSystemStatus();
         curr_stage = 0;
         dwm.standardRX();

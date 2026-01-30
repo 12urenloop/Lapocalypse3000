@@ -12,39 +12,38 @@
 // replace with the pins you want to use
 
 //ESP32 WROOM
-const int HSPI_MISO = 19;
-const int HSPI_MOSI = 23;
-const int HSPI_SCLK = 18;
-const int HSPI_SS = 4;
+// const int HSPI_MISO = 19;
+// const int HSPI_MOSI = 23;
+// const int HSPI_SCLK = 18;
+// const int HSPI_SS = 4;
 
-const int VSPI_MISO = 19;
-const int VSPI_MOSI = 23;
-const int VSPI_SCLK = 18;
-const int VSPI_SS = 4;
-#define CHIP_SELECT_PIN 4 // ESP32 WROOM
+// const int VSPI_MISO = 19;
+// const int VSPI_MOSI = 23;
+// const int VSPI_SCLK = 18;
+// const int VSPI_SS = 4;
+// #define RST_PIN 27
+// #define CHIP_SELECT_PIN 4 // ESP32 WROOM
 
 //WT32-ETH01
-// const int HSPI_MISO = 15;
-// const int HSPI_MOSI = 12;
-// const int HSPI_SCLK = 14;
-// const int HSPI_SS = 5;
+const int HSPI_MISO = 15;
+const int HSPI_MOSI = 12;
+const int HSPI_SCLK = 14;
+const int HSPI_SS = 5;
 
-// const int VSPI_MISO = 15;
-// const int VSPI_MOSI = 12;
-// const int VSPI_SCLK = 14;
-// const int VSPI_SS = 5;
-// #define CHIP_SELECT_PIN 5 // WT32-ETH01
+const int VSPI_MISO = 15;
+const int VSPI_MOSI = 12;
+const int VSPI_SCLK = 14;
+const int VSPI_SS = 5;
+#define RST_PIN 17
+#define CHIP_SELECT_PIN 5 // WT32-ETH01
 
-// WiFi Configuration
-#include "wificonfig.h"
-#define USEWIFI false
+
 
 const int port = 7007;             // Choose a port number
 WiFiClient client;
 bool wifiConnected = false;
 
 // SPI Setup
-#define RST_PIN 17
 
 // Scalable Anchor Configuration
 #define NUM_ANCHORS 1 // Change this to scale the system

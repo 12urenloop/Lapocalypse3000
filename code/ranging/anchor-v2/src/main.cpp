@@ -1,3 +1,6 @@
-// #include "anchor.h"
+// WiFi Configuration
+#include "wificonfig.h"
+#define USEWIFI true
 
-#include "tag.h"
+#include "anchor.h"
+// #include "tag.h"

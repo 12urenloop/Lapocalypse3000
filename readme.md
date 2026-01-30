@@ -6,7 +6,7 @@
 - [x] Ranging between 2 modules
 - [x] Improving range (ideally ~30 meters)
 - [ ] Multi Tag multi Anchor (this is a big one!)
-    - [ ] Rewrite tag and anchor
+    - [x] Refactor DW3000 API
     - [ ] Test SSTWR (single side two way ranging)
     - [ ] Timing / power measurements
     - [ ] Design multi tag method

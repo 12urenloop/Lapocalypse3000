@@ -108,6 +108,7 @@ public:
     void standardTX();
     void standardRX();
     void TXInstantRX();
+    void DTXInstantRX(unsigned int dx_time);
 
     // DWM3000 Firmware Interaction
     void softReset();
@@ -303,7 +304,7 @@ void DWM3000Class::init()
     write(PRE_TOC_ID, regval);
 
     // LEDs
-    write(GPIO_MODE_ID, 0b001001001001001001001001001); // turn on all led GPIOs
+    write(GPIO_MODE_ID, 0b001001001001001010010010010); // turn on all led GPIOs
     uint32_t clk_ctrl = read(CLK_CTRL_ID);
     clk_ctrl |= 1 << 18; // enable debounce clocks
     write(CLK_CTRL_ID, clk_ctrl);
@@ -1164,8 +1165,20 @@ void DWM3000Class::standardRX()
 */
 void DWM3000Class::TXInstantRX()
 {
+
     DWM3000Class::writeFastCommand(0x0C);
 }
+
+/*
+ Performs a delayed TX operation wrt RX_TIME + DX_TIME and instantly switches to Receiver mode
+*/
+void DWM3000Class::DTXInstantRX(unsigned int DX_TIME)
+{
+    //TODO set DX_TIME
+    write(DREF_TIME_ID, DX_TIME);
+    writeFastCommand(0x0F);
+}
+
 
 /*
  #####  DWM3000 Firmware Interaction  #####

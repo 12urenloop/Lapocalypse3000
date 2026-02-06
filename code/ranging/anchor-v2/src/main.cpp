@@ -1,6 +1,6 @@
 // WiFi Configuration
 #include "wificonfig.h"
-#define USEWIFI true
+#define USEWIFI false
 
-#include "anchor.h"
-// #include "tag.h"
+// #include "anchor.h"
+#include "tag.h"

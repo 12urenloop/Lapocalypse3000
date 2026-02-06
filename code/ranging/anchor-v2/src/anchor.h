@@ -7,8 +7,6 @@
 #include "regids_dw3000_api.h"
 
 // SPI Setup
-#define RST_PIN 27
-#define CHIP_SELECT_PIN 4
 
 #define HSPI 2  // 2 for S2 and S3, 1 for S1
 #define VSPI 3
@@ -38,8 +36,8 @@ const int HSPI_SS = 4;
 const int VSPI_MISO = 19;
 const int VSPI_MOSI = 23;
 const int VSPI_SCLK = 18;
-const int VSPI_SS = 4;
 #define CHIP_SELECT_PIN 4 // ESP32 WROOM
+#define RST_PIN 27
 #endif
 
 #ifdef BOARD_ESP32_WT32_ETH01
@@ -52,8 +50,8 @@ const int HSPI_SS = 5;
 const int VSPI_MISO = 15;
 const int VSPI_MOSI = 12;
 const int VSPI_SCLK = 14;
-const int VSPI_SS = 5;
 #define CHIP_SELECT_PIN 5 // WT32-ETH01
+#define RST_PIN 17
 #endif
 
 
@@ -205,6 +203,9 @@ void setup()
   dwm.standardRX();
 }
 
+//timing recording variables
+unsigned long start, end = 0;
+
 void handleCommand(const String& cmd) {
     // Tokenize
     int firstSpace  = cmd.indexOf(' ');
@@ -259,6 +260,9 @@ void handleCommand(const String& cmd) {
     }
 }
 
+void DSTWR_anchor_loop();
+void SSTWR_anchor_loop();
+
 void loop()
 {
   if (USEWIFI && !wifiConnected)
@@ -287,7 +291,84 @@ void loop()
   }
 
 
+  // DSTWR_anchor_loop();
+  SSTWR_anchor_loop();
 
+}
+
+void SSTWR_anchor_loop(){
+  // if (dwm.receivedFrameSucc() == 1 && dwm.ds_getStage() == 1 && dwm.getDestinationID() == ANCHOR_ID)
+  // {
+  //   // Reset session if new ranging request arrives
+  //   if (curr_stage != 0)
+  //   {
+  //     Serial.println("[INFO] New request - resetting session");
+  //     curr_stage = 0;
+  //     t_roundB = 0;
+  //     t_replyB = 0;
+  //   }
+  // }
+
+  if (rx_status = dwm.receivedFrameSucc())
+  {
+    dwm.clearSystemStatus();
+    if (rx_status == 1)
+    { // If frame reception was successful
+      // Only respond if frame is addressed to us
+      if (dwm.getDestinationID() == ANCHOR_ID)
+      {
+        if (dwm.ds_isErrorFrame())
+        {
+          Serial.println("[WARNING] Received error frame!");
+          curr_stage = 0;
+          dwm.standardRX();
+        }
+        else if (dwm.ds_getStage() != 1)
+        {
+          Serial.print("[WARNING] Unexpected stage: ");
+          Serial.println(dwm.ds_getStage());
+          // DWM3000.ds_sendErrorFrame(); // turned this off experimentally
+          dwm.clearSystemStatus();
+          curr_stage = 0;
+          dwm.standardRX();
+        }
+        else
+        {
+          dwm.prepareDelayedTX(sender, destination);
+          dwm.delayedTXThenRX();
+          delay(4);
+          dwm.clearSystemStatus();
+          Serial.println("reply planned");
+        }
+        last_ranging_time = millis();
+      }
+      else
+      {
+        // Not for us, go back to RX
+        dwm.standardRX();
+      }
+    }
+    else
+    {
+      dwm.clearSystemStatus();
+      dwm.standardRX();
+      Serial.println("[ERROR] Receiver Error occurred in stage 1!");
+    }
+  }
+  // else if (millis() - last_ranging_time > RESPONSE_TIMEOUT_MS)
+  // {
+  //   Serial.println("[WARNING] Timeout waiting for ranging request");
+  //   if (++retry_count > MAX_RETRIES)
+  //   {
+  //     Serial.println("[ERROR] Max retries reached, resetting radio");
+  //     resetRadio();
+  //     retry_count = 0;
+  //   }
+  //   dwm.standardRX(); // Reset to listening mode
+  // }
+}
+
+void DSTWR_anchor_loop(){
   if (dwm.receivedFrameSucc() == 1 && dwm.ds_getStage() == 1 && dwm.getDestinationID() == ANCHOR_ID)
   {
     // Reset session if new ranging request arrives
@@ -362,7 +443,11 @@ void loop()
     break;
 
   case 1: // Ranging received. Sending response
+    start = micros();
     dwm.ds_sendFrame(2, sender, destination);
+    end = micros();
+    Serial.print("TX time: "); Serial.println(end - start);
+
 
     rx = dwm.readRXTimestamp();
     tx = dwm.readTXTimestamp();

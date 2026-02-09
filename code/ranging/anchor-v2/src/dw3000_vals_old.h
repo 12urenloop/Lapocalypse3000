@@ -75,7 +75,7 @@
 #define INDIRECT_PTR_B_REG 0x1E
 #define IN_PTR_CFG_REG 0x1F
 
-#define TRANSMIT_DELAY_UUS 50
+#define TRANSMIT_DELAY_UUS 40
 #define UUS_TO_DWT_TIME 63898
 
 
@@ -83,8 +83,10 @@
 
 #define NS_UNIT 4.0064102564102564  // ns
 #define PS_UNIT 15.6500400641025641 // ps
+#define DWT_TIME_UNITS      (1.0/499.2e6/128.0) //!< = 15.65e-12 s
 
 #define SPEED_OF_LIGHT 0.029979245800 // in centimetres per picosecond
+#define SPEED_OF_LIGHT_MF (299702547) // in centimetres per picosecond
 
 #define CLOCK_OFFSET_CHAN_5_CONSTANT -0.5731e-3f
 #define CLOCK_OFFSET_CHAN_9_CONSTANT -0.1252e-3f

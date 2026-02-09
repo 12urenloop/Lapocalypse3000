@@ -208,7 +208,11 @@ void loop() {
                     rtd_init = resp_rx_ts - poll_tx_ts;
                     rtd_resp = resp_tx_ts - poll_rx_ts;
 
+                    printf("rtd_resp: %d \n", rtd_init);
+                    printf("rtd_resp: %d \n", rtd_resp);
+
                     tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
+                    printf("TOF: %f \n", tof * 100000);
                     distance = tof * SPEED_OF_LIGHT;
 
                     /* Display computed distance on LCD. */

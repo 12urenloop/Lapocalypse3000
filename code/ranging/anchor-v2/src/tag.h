@@ -541,36 +541,18 @@ void SSTWR_tag_loop(){
             dwm.clearSystemStatus();
             if (rx_status == 1)
             {
-                if (dwm.ds_isErrorFrame())
-                {
-                    Serial.print("[WARNING] Error frame from Anchor ");
-                    Serial.print(currentAnchorId);
-                    Serial.print("! Signal strength: ");
-                    Serial.print(dwm.getSignalStrength());
-                    Serial.println(" dBm");
-                    curr_stage = 0;
-                }
-                // else if (dwm.ds_getStage() != 2)
-                // {
-                //     Serial.print(millis());
-                //     Serial.print(": ");
-                //     Serial.print("[WARNING] Unexpected stage from Anchor ");
-                //     Serial.print(currentAnchorId);
-                //     Serial.print(": ");
-                //     Serial.println(dwm.ds_getStage());
-                //     dwm.ds_sendErrorFrame();
-                //     curr_stage = 0;
-                // }
-                else
-                {
-                    curr_stage = 2;
-                }
+                dwm.calculateTXRXdiff();
+                // dwm.clearSystemStatus();
+                // dwm.standardRX();
+                curr_stage = 0;
+                delay(10);
+                break;
             }
             else
             {
                 Serial.print(millis());
                 Serial.print(": ");
-                Serial.print("[ERROR] Receiver Error stage 2 from Anchor ");
+                Serial.print("[ERROR] Receiver Error stage 1 from Anchor ");
                 Serial.println(currentAnchorId);
                 dwm.clearSystemStatus();
                 curr_stage = 0;
@@ -582,18 +564,6 @@ void SSTWR_tag_loop(){
                 Serial.println("RX timeout");
             }
         }
-        break;
-
-    case 2: // Response received. Send second ranging
-        // currentAnchor->rx = dwm.readRXTimestamp();
-        // currentAnchor->t_roundA = currentAnchor->rx - currentAnchor->tx;
-        // roundtrip = (currentAnchor->rx - currentAnchor->tx) - 2560000000 - 5570;
-        // Serial.print("Round trip: "); Serial.println(roundtrip);
-        // Serial.print("Centimeters: "); Serial.println(dwm.convertToCM((int)roundtrip) / 2.0);
-        dwm.calculateTXRXdiff();
-        dwm.clearSystemStatus();
-
-        curr_stage = 0;
         break;
 
 

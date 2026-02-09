@@ -964,12 +964,12 @@ uint64_t DWM3000Class::readRXTimestamp()
  Reads the internal TX Timestamp. The timestamp is a relative timestamp to the chips internal clock. Units of ~15.65ps. (See DWM3000 User Manual 3.2 for more)
  @return The TX Timestamp in units of ~15.65ps
 */
-unsigned long long DWM3000Class::readTXTimestamp()
+uint64_t DWM3000Class::readTXTimestamp()
 {
-    unsigned long long ts_low = read(TX_TIME_LO_ID);
-    unsigned long long ts_high = read(TX_TIME_HI_ID) & 0xFF;
+    uint64_t ts_low = read(TX_TIME_LO_ID);
+    uint64_t ts_high = read(TX_TIME_HI_ID) & 0xFF;
 
-    unsigned long long tx_timestamp = (ts_high << 32) + ts_low;
+    uint64_t tx_timestamp = (ts_high << 32) + ts_low;
 
     return tx_timestamp;
 }
@@ -1095,9 +1095,10 @@ void DWM3000Class::prepareDelayedTX(int senderID, int destinationID)
     // uint32_t resp_tx_time = ( (50 * UUS_TO_DWT_TIME));
     // Write delay to register
     writeTXDelay(resp_tx_time);
-    unsigned long long resp_tx_ts = (((uint64_t)((resp_tx_time) & 0xFFFFFFFEUL)) << 8) + this->config.antennaDelay;
+    uint64_t resp_tx_ts = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + this->config.antennaDelay;
+    // unsigned long long resp_tx_ts = (((uint64_t)((resp_tx_time) & 0xFFFFFFFEUL)) << 8) + this->config.antennaDelay;
 
-    uint32_t reply_delay = resp_tx_ts - poll_rx_ts;
+    uint64_t reply_delay = resp_tx_ts - poll_rx_ts;
 
     /*
       * PAYLOAD DESIGN:
@@ -1120,7 +1121,7 @@ void DWM3000Class::prepareDelayedTX(int senderID, int destinationID)
 
     write(TX_BUFFER_REG, 0x01, senderID & 0xFF);
     write(TX_BUFFER_REG, 0x02, destinationID & 0xFF);
-    write(TX_BUFFER_REG, 0x03, reply_delay); // set frame content
+    write(TX_BUFFER_REG, 0x03, (uint32_t)reply_delay); // set frame content
 
     setFrameLength(7); // Control Byte (1 Byte) + Sender ID (1 Byte) + Dest. ID (1 Byte) + Reply Delay (4 Bytes) = 7 Bytes
     delayedTXThenRX();
@@ -1246,8 +1247,8 @@ double DWM3000Class::convertToCM(int DWM3000_ps_units)
 */
 void DWM3000Class::calculateTXRXdiff()
 {
-    unsigned long long ping_tx = readTXTimestamp();
-    unsigned long long ping_rx = readRXTimestamp();
+    uint64_t ping_tx = readTXTimestamp();
+    uint64_t ping_rx = readRXTimestamp();
 
     long double clk_offset = getClockOffset();
     long double clock_offset = 1.0 - clk_offset;
@@ -1272,7 +1273,11 @@ void DWM3000Class::calculateTXRXdiff()
       * 7 - Error
       */
 
-    long long t_reply = read(RX_BUFFER_0_REG, 0x03);
+    int64_t t_reply = read(RX_BUFFER_0_REG, 0x03);
+    int64_t t_round = ping_rx - ping_tx;
+    Serial.print("reply: "); Serial.println(t_reply);
+    Serial.print("round: "); Serial.println(t_round);
+
 
     /*
      * Calculate round trip time (see DWM3000 User Manual page 248 for more)
@@ -1284,13 +1289,12 @@ void DWM3000Class::calculateTXRXdiff()
     }
 
     // Serial.print("reply time: "); Serial.println(t_reply);
-    long long t_round = ping_rx - ping_tx;
-    long long t_prop = lround(((double)t_round - lround((double)t_reply * clock_offset)) / 2);
+    // long long t_prop = lround(((double)t_round - lround((double)t_reply * clock_offset)) / 2);
+    double tof = ((t_round - t_reply * clock_offset) / 2.0) * DWT_TIME_UNITS;
+    Serial.print("TOF: "); Serial.println(tof);
 
-    long double t_prop_ps = t_prop * PS_UNIT;
-
-    long double t_prop_cm = t_prop_ps * SPEED_OF_LIGHT - 1400;
-    if (t_prop_cm >= 0)
+    double t_prop_cm = tof * SPEED_OF_LIGHT_MF;
+    if (true || t_prop_cm >= 0)
     {
         printDouble(t_prop_cm, 100, false); // second value sets the decimal places. 100 = 2 decimal places, 1000 = 3, 10000 = 4, ...
         Serial.println("cm");

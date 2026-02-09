@@ -329,6 +329,7 @@ void SSTWR_anchor_loop(){
           // dwm.ds_sendFrame(2, sender, destination);
           // dwm.clearSystemStatus();
           dwm.prepareDelayedTX(sender, destination);
+          // dwm.standardRX();
           // dwm.delayedTXThenRX();
           Serial.println("sending reply");
         }

@@ -115,7 +115,7 @@ bool wifiConnected = false;
 #define INDIRECT_PTR_A_REG 0x1D
 #define INDIRECT_PTR_B_REG 0x1E
 #define IN_PTR_CFG_REG 0x1F
-#define TRANSMIT_DELAY 0x3B9ACA00
+#define TRANSMIT_DELAY_UUS 0x3B9ACA00
 #define TRANSMIT_DIFF 0x1FF
 #define NS_UNIT 4.0064102564102564    // ns
 #define PS_UNIT 15.6500400641025641   // ps
@@ -1131,8 +1131,8 @@ void DWM3000Class::writeTXDelay(uint32_t delay)
 void DWM3000Class::prepareDelayedTX()
 {
     long long rx_ts = readRXTimestamp();
-    uint32_t exact_tx_timestamp = (long long)(rx_ts + TRANSMIT_DELAY) >> 8;
-    long long calc_tx_timestamp = ((rx_ts + TRANSMIT_DELAY) & ~TRANSMIT_DIFF) + ANTENNA_DELAY;
+    uint32_t exact_tx_timestamp = (long long)(rx_ts + TRANSMIT_DELAY_UUS) >> 8;
+    long long calc_tx_timestamp = ((rx_ts + TRANSMIT_DELAY_UUS) & ~TRANSMIT_DIFF) + ANTENNA_DELAY;
     uint32_t reply_delay = calc_tx_timestamp - rx_ts;
     write(0x14, 0x01, sender & 0xFF);
     write(0x14, 0x02, destination & 0xFF);

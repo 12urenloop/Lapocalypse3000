@@ -84,7 +84,7 @@ public:
     int getRawClockOffset();
     float getTempInC();
 
-    unsigned long long readRXTimestamp();
+    uint64_t readRXTimestamp();
     unsigned long long readTXTimestamp();
 
     // Chip Interaction
@@ -950,12 +950,12 @@ float DWM3000Class::getTempInC()
  Reads the internal RX Timestamp. The timestamp is a relative timestamp to the chips internal clock. Units of ~15.65ps. (See DWM3000 User Manual 4.1.7 for more)
  @return The RX Timestamp in units of ~15.65ps
 */
-unsigned long long DWM3000Class::readRXTimestamp()
+uint64_t DWM3000Class::readRXTimestamp()
 {
     uint32_t ts_low = read(IP_TS_ID);
-    unsigned long long ts_high = read(IP_TS_ID + 4) & 0xFF;
+    uint64_t ts_high = read(IP_TS_ID + 4) & 0xFF;
 
-    unsigned long long rx_timestamp = (ts_high << 32) | ts_low;
+    uint64_t rx_timestamp = (ts_high << 32) | ts_low;
 
     return rx_timestamp;
 }
@@ -1087,13 +1087,17 @@ void DWM3000Class::writeTXDelay(uint32_t delay)
 */
 void DWM3000Class::prepareDelayedTX(int senderID, int destinationID)
 {
-    long long rx_ts = readRXTimestamp();
+    uint64_t poll_rx_ts = readRXTimestamp();
 
-    uint32_t exact_tx_timestamp = (long long)(rx_ts + TRANSMIT_DELAY) >> 8;
+    // uint32_t exact_tx_timestamp = (long long)(rx_ts + TRANSMIT_DELAY) >> 8;
 
-    long long calc_tx_timestamp = ((rx_ts + TRANSMIT_DELAY) & ~TRANSMIT_DIFF) + this->config.antennaDelay;
+    uint32_t resp_tx_time = ((poll_rx_ts >> 8) + (TRANSMIT_DELAY_UUS * UUS_TO_DWT_TIME));
+    // uint32_t resp_tx_time = ( (50 * UUS_TO_DWT_TIME));
+    // Write delay to register
+    writeTXDelay(resp_tx_time);
+    unsigned long long resp_tx_ts = (((uint64_t)((resp_tx_time) & 0xFFFFFFFEUL)) << 8) + this->config.antennaDelay;
 
-    uint32_t reply_delay = calc_tx_timestamp - rx_ts;
+    uint32_t reply_delay = resp_tx_ts - poll_rx_ts;
 
     /*
       * PAYLOAD DESIGN:
@@ -1119,9 +1123,11 @@ void DWM3000Class::prepareDelayedTX(int senderID, int destinationID)
     write(TX_BUFFER_REG, 0x03, reply_delay); // set frame content
 
     setFrameLength(7); // Control Byte (1 Byte) + Sender ID (1 Byte) + Dest. ID (1 Byte) + Reply Delay (4 Bytes) = 7 Bytes
+    delayedTXThenRX();
 
-    // Write delay to register
-    writeTXDelay(exact_tx_timestamp);
+    // Serial.print("RX: "); Serial.printf("%#010x", poll_rx_ts >> 32); Serial.printf("%#010x\n", poll_rx_ts & 0xFFFFFFFF);
+    // Serial.print("RP: "); Serial.printf("%#010x\n", resp_tx_time);
+
 }
 
 /*
@@ -1133,7 +1139,7 @@ void DWM3000Class::prepareDelayedTX(int senderID, int destinationID)
 */
 void DWM3000Class::delayedTXThenRX()
 {
-    writeFastCommand(0x0F);
+    writeFastCommand(0x0D);
 }
 
 /*
@@ -1244,7 +1250,8 @@ void DWM3000Class::calculateTXRXdiff()
     unsigned long long ping_rx = readRXTimestamp();
 
     long double clk_offset = getClockOffset();
-    long double clock_offset = 1.0 + clk_offset;
+    long double clock_offset = 1.0 - clk_offset;
+    // Serial.print("clock offset: "); Serial.println((double)clock_offset, 10);
 
     /*
          * PAYLOAD DESIGN:
@@ -1276,12 +1283,13 @@ void DWM3000Class::calculateTXRXdiff()
         return;
     }
 
+    // Serial.print("reply time: "); Serial.println(t_reply);
     long long t_round = ping_rx - ping_tx;
-    long long t_prop = lround((t_round - lround(t_reply * clock_offset)) / 2);
+    long long t_prop = lround(((double)t_round - lround((double)t_reply * clock_offset)) / 2);
 
     long double t_prop_ps = t_prop * PS_UNIT;
 
-    long double t_prop_cm = t_prop_ps * SPEED_OF_LIGHT;
+    long double t_prop_cm = t_prop_ps * SPEED_OF_LIGHT - 1400;
     if (t_prop_cm >= 0)
     {
         printDouble(t_prop_cm, 100, false); // second value sets the decimal places. 100 = 2 decimal places, 1000 = 3, 10000 = 4, ...

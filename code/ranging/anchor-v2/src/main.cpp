@@ -2,5 +2,11 @@
 #include "wificonfig.h"
 #define USEWIFI false
 
-// #include "anchor.h"
+
+#ifdef TAGCODE
 #include "tag.h"
+#endif
+
+#ifdef ANCHORCODE
+#include "anchor.h"
+#endif

@@ -117,7 +117,7 @@ DWM3000Class::Config config = {
     VSPI_SCLK,         // SCK Pin
     ANTENNA_DELAY,     // Antenna Delay
     CHANNEL_5,         // Channel
-    PREAMBLE_4096,     // Preamble Length
+    PREAMBLE_1024,     // Preamble Length
     9,                 // Preamble Code (Same for RX and TX!)
     PAC8,              // PAC
     DATARATE_850KB,    // Datarate
@@ -297,17 +297,9 @@ void loop()
 }
 
 void SSTWR_anchor_loop(){
-  // if (dwm.receivedFrameSucc() == 1 && dwm.ds_getStage() == 1 && dwm.getDestinationID() == ANCHOR_ID)
-  // {
-  //   // Reset session if new ranging request arrives
-  //   if (curr_stage != 0)
-  //   {
-  //     Serial.println("[INFO] New request - resetting session");
-  //     curr_stage = 0;
-  //     t_roundB = 0;
-  //     t_replyB = 0;
-  //   }
-  // }
+  t_roundB = 0;
+  t_replyB = 0;
+  last_ranging_time = millis(); // Reset timeout timer
 
   if (rx_status = dwm.receivedFrameSucc())
   {
@@ -323,24 +315,23 @@ void SSTWR_anchor_loop(){
           curr_stage = 0;
           dwm.standardRX();
         }
-        else if (dwm.ds_getStage() != 1)
-        {
-          Serial.print("[WARNING] Unexpected stage: ");
-          Serial.println(dwm.ds_getStage());
-          // DWM3000.ds_sendErrorFrame(); // turned this off experimentally
-          dwm.clearSystemStatus();
-          curr_stage = 0;
-          dwm.standardRX();
-        }
+        // else if (dwm.ds_getStage() != 1)
+        // {
+        //   Serial.print("[WARNING] Unexpected stage: ");
+        //   Serial.println(dwm.ds_getStage());
+        //   // DWM3000.ds_sendErrorFrame(); // turned this off experimentally
+        //   dwm.clearSystemStatus();
+        //   curr_stage = 0;
+        //   dwm.standardRX();
+        // }
         else
         {
+          // dwm.ds_sendFrame(2, sender, destination);
+          // dwm.clearSystemStatus();
           dwm.prepareDelayedTX(sender, destination);
-          dwm.delayedTXThenRX();
-          delay(4);
-          dwm.clearSystemStatus();
-          Serial.println("reply planned");
+          // dwm.delayedTXThenRX();
+          Serial.println("sending reply");
         }
-        last_ranging_time = millis();
       }
       else
       {
@@ -350,22 +341,12 @@ void SSTWR_anchor_loop(){
     }
     else
     {
+      Serial.println("[ERROR] Receiver Error occurred in stage 1!");
       dwm.clearSystemStatus();
       dwm.standardRX();
-      Serial.println("[ERROR] Receiver Error occurred in stage 1!");
+      curr_stage = 0;
     }
   }
-  // else if (millis() - last_ranging_time > RESPONSE_TIMEOUT_MS)
-  // {
-  //   Serial.println("[WARNING] Timeout waiting for ranging request");
-  //   if (++retry_count > MAX_RETRIES)
-  //   {
-  //     Serial.println("[ERROR] Max retries reached, resetting radio");
-  //     resetRadio();
-  //     retry_count = 0;
-  //   }
-  //   dwm.standardRX(); // Reset to listening mode
-  // }
 }
 
 void DSTWR_anchor_loop(){

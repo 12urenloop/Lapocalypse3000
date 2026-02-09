@@ -12,30 +12,30 @@
 // replace with the pins you want to use
 
 //ESP32 WROOM
-// const int HSPI_MISO = 19;
-// const int HSPI_MOSI = 23;
-// const int HSPI_SCLK = 18;
-// const int HSPI_SS = 4;
+const int HSPI_MISO = 19;
+const int HSPI_MOSI = 23;
+const int HSPI_SCLK = 18;
+const int HSPI_SS = 4;
 
-// const int VSPI_MISO = 19;
-// const int VSPI_MOSI = 23;
-// const int VSPI_SCLK = 18;
-// const int VSPI_SS = 4;
-// #define RST_PIN 27
-// #define CHIP_SELECT_PIN 4 // ESP32 WROOM
+const int VSPI_MISO = 19;
+const int VSPI_MOSI = 23;
+const int VSPI_SCLK = 18;
+const int VSPI_SS = 4;
+#define RST_PIN 27
+#define CHIP_SELECT_PIN 4 // ESP32 WROOM
 
 //WT32-ETH01
-const int HSPI_MISO = 15;
-const int HSPI_MOSI = 12;
-const int HSPI_SCLK = 14;
-const int HSPI_SS = 5;
+// const int HSPI_MISO = 15;
+// const int HSPI_MOSI = 12;
+// const int HSPI_SCLK = 14;
+// const int HSPI_SS = 5;
 
-const int VSPI_MISO = 15;
-const int VSPI_MOSI = 12;
-const int VSPI_SCLK = 14;
-const int VSPI_SS = 5;
-#define RST_PIN 17
-#define CHIP_SELECT_PIN 5 // WT32-ETH01
+// const int VSPI_MISO = 15;
+// const int VSPI_MOSI = 12;
+// const int VSPI_SCLK = 14;
+// const int VSPI_SS = 5;
+// #define RST_PIN 17
+// #define CHIP_SELECT_PIN 5 // WT32-ETH01
 
 
 
@@ -56,74 +56,6 @@ bool wifiConnected = false;
 #define MAX_DISTANCE 5000.0 // 50 meters
 
 // UWB Configuration
-// #define LEN_RX_CAL_CONF 4
-// #define LEN_TX_FCTRL_CONF 6
-// #define LEN_AON_DIG_CFG_CONF 3
-// #define PMSC_STATE_IDLE 0x3
-// #define FCS_LEN 2
-// #define STDRD_SYS_CONFIG 0x188
-// #define DTUNE0_CONFIG 0x0F
-// #define SYS_STATUS_FRAME_RX_SUCC 0x2000
-// #define SYS_STATUS_RX_ERR 0x4279000
-// #define SYS_STATUS_FRAME_TX_SUCC 0x80
-// #define PREAMBLE_32 4
-// #define PREAMBLE_64 8
-// #define PREAMBLE_128 5
-// #define PREAMBLE_256 9
-// #define PREAMBLE_512 11
-// #define PREAMBLE_1024 2
-// #define PREAMBLE_2048 10
-// #define PREAMBLE_4096 3
-// #define PREAMBLE_1536 6
-// #define CHANNEL_5 0x0
-// #define CHANNEL_9 0x1
-// #define PAC4 0x03
-// #define PAC8 0x00
-// #define PAC16 0x01
-// #define PAC32 0x02
-// #define DATARATE_6_8MB 0x1
-// #define DATARATE_850KB 0x0
-// #define PHR_MODE_STANDARD 0x0
-// #define PHR_MODE_LONG 0x1
-// #define PHR_RATE_6_8MB 0x1
-// #define PHR_RATE_850KB 0x0
-// #define SPIRDY_MASK 0x80
-// #define RCINIT_MASK 0x100
-// #define BIAS_CTRL_BIAS_MASK 0x1F
-// #define GEN_CFG_AES_LOW_REG 0x00
-// #define GEN_CFG_AES_HIGH_REG 0x01
-// #define STS_CFG_REG 0x2
-// #define RX_TUNE_REG 0x3
-// #define EXT_SYNC_REG 0x4
-// #define GPIO_CTRL_REG 0x5
-// #define DRX_REG 0x6
-// #define RF_CONF_REG 0x7
-// #define RF_CAL_REG 0x8
-// #define FS_CTRL_REG 0x9
-// #define AON_REG 0xA
-// #define OTP_IF_REG 0xB
-// #define CIA_REG1 0xC
-// #define CIA_REG2 0xD
-// #define CIA_REG3 0xE
-// #define DIG_DIAG_REG 0xF
-// #define PMSC_REG 0x11
-// #define RX_BUFFER_0_REG 0x12
-// #define RX_BUFFER_1_REG 0x13
-// #define TX_BUFFER_REG 0x14
-// #define ACC_MEM_REG 0x15
-// #define SCRATCH_RAM_REG 0x16
-// #define AES_RAM_REG 0x17
-// #define SET_1_2_REG 0x18
-// #define INDIRECT_PTR_A_REG 0x1D
-// #define INDIRECT_PTR_B_REG 0x1E
-// #define IN_PTR_CFG_REG 0x1F
-// #define TRANSMIT_DIFF 0x1FF
-// #define NS_UNIT 4.0064102564102564    // ns
-// #define PS_UNIT 15.6500400641025641   // ps
-// #define SPEED_OF_LIGHT 0.029979245800 // in centimetres per picosecond
-// #define CLOCK_OFFSET_CHAN_5_CONSTANT -0.5731e-3f
-// #define CLOCK_OFFSET_CHAN_9_CONSTANT -0.1252e-3f
-// #define NO_OFFSET 0x0
 #define DEBUG_OUTPUT 0
 static int ANTENNA_DELAY = 16350;
 int led_status = 0;
@@ -169,8 +101,8 @@ struct AnchorData
     // Timing measurements
     int t_roundA = 0;
     int t_replyA = 0;
-    long long rx = 0;
-    long long tx = 0;
+    unsigned long long rx = 0;
+    unsigned long long tx = 0;
     int clock_offset = 0;
 
     // Distance measurements
@@ -583,6 +515,8 @@ void loop()
     
 }
 
+unsigned long long roundtrip = 0;
+
 void SSTWR_tag_loop(){
     AnchorData *currentAnchor = getCurrentAnchor();
     int currentAnchorId = getCurrentAnchorId();
@@ -592,9 +526,11 @@ void SSTWR_tag_loop(){
         // Reset timing measurements for current anchor
         currentAnchor->t_roundA = 0;
         currentAnchor->t_replyA = 0;
+        // dwm.clearSystemStatus();
 
         dwm.ds_sendFrame(1, TAG_ID, currentAnchorId);
         currentAnchor->tx = dwm.readTXTimestamp();
+        Serial.println("sent ranging request");
         curr_stage = 1;
         sentmillis = millis();
         break;
@@ -649,10 +585,13 @@ void SSTWR_tag_loop(){
         break;
 
     case 2: // Response received. Send second ranging
-        currentAnchor->rx = dwm.readRXTimestamp();
+        // currentAnchor->rx = dwm.readRXTimestamp();
+        // currentAnchor->t_roundA = currentAnchor->rx - currentAnchor->tx;
+        // roundtrip = (currentAnchor->rx - currentAnchor->tx) - 2560000000 - 5570;
+        // Serial.print("Round trip: "); Serial.println(roundtrip);
+        // Serial.print("Centimeters: "); Serial.println(dwm.convertToCM((int)roundtrip) / 2.0);
+        dwm.calculateTXRXdiff();
         dwm.clearSystemStatus();
-        currentAnchor->t_roundA = currentAnchor->rx - currentAnchor->tx - TRANSMIT_DELAY;
-        Serial.print("Round trip: "); Serial.println(currentAnchor->t_roundA);
 
         curr_stage = 0;
         break;

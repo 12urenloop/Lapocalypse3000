@@ -201,6 +201,8 @@ void setup()
   dwm.configureAsTX();
   dwm.clearSystemStatus();
   dwm.standardRX();
+
+  Serial.println("boy what the hell boy");
 }
 
 //timing recording variables
@@ -260,46 +262,62 @@ void handleCommand(const String& cmd) {
     }
 }
 
+void diagnostic(){
+    for(int base = 0; base <= 10; base++){
+        for(int sub = 0; sub <= 0x68; sub += 4){
+            int result = dwm.read(base, sub);
+            Serial.printf("%02x:%02x = %#010x\n", base, sub, result);
+        }
+    }
+}
+
 void DSTWR_anchor_loop();
 void SSTWR_anchor_loop();
 
+int nloop = 0;
+
 void loop()
 {
-  if (USEWIFI && !wifiConnected)
-  {
-      connectToWiFi();
-      if (!wifiConnected)
-          return;
-  }
+  // if (USEWIFI && !wifiConnected)
+  // {
+  //     connectToWiFi();
+  //     if (!wifiConnected)
+  //         return;
+  // }
 
-  if (USEWIFI && !client.connected() && USEWIFI) {
-      Serial.println("Disconnected. Reconnecting...");
-      while (!client.connect(host, port)) {
-          delay(500);
-      }
-      Serial.println("connected!");
-  }
+  // if (USEWIFI && !client.connected() && USEWIFI) {
+  //     Serial.println("Disconnected. Reconnecting...");
+  //     while (!client.connect(host, port)) {
+  //         delay(500);
+  //     }
+  //     Serial.println("connected!");
+  // }
 
-  if (USEWIFI && client.available()) {
-      String command = client.readStringUntil('\n');
-      command.trim();
+  // if (USEWIFI && client.available()) {
+  //     String command = client.readStringUntil('\n');
+  //     command.trim();
 
-      if (command.length() > 0) {
-          Serial.println("Received command: " + command);
-          handleCommand(command);
-      }
-  }
+  //     if (command.length() > 0) {
+  //         Serial.println("Received command: " + command);
+  //         handleCommand(command);
+  //     }
+  // }
 
 
   // DSTWR_anchor_loop();
   SSTWR_anchor_loop();
 
+  if(nloop == 2000){
+      diagnostic();
+      delay(30000);
+  }
+
 }
 
 void SSTWR_anchor_loop(){
-  t_roundB = 0;
-  t_replyB = 0;
-  last_ranging_time = millis(); // Reset timeout timer
+  // t_roundB = 0;
+  // t_replyB = 0;
+  // last_ranging_time = millis(); // Reset timeout timer
 
   if (rx_status = dwm.receivedFrameSucc())
   {
@@ -329,14 +347,17 @@ void SSTWR_anchor_loop(){
           // dwm.ds_sendFrame(2, sender, destination);
           // dwm.clearSystemStatus();
           dwm.prepareDelayedTX(sender, destination);
+          delay(10);
+          dwm.standardRX();
           // dwm.standardRX();
           // dwm.delayedTXThenRX();
-          Serial.println("sending reply");
+          // Serial.println("sending reply");
         }
       }
       else
       {
         // Not for us, go back to RX
+        Serial.println("notforus");
         dwm.standardRX();
       }
     }

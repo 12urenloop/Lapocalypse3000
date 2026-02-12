@@ -488,30 +488,75 @@ unsigned long sentmillis = 0;
 // void DSTWR_tag_loop();
 void SSTWR_tag_loop();
 
+int nloop = 0;
+
 void loop()
 {
     
 
-    if (USEWIFI && !client.connected()) {
-        Serial.println("Disconnected. Reconnecting...");
-        while (!client.connect(host, port)) {
-            delay(500);
-        }
-        Serial.println("connected!");
-    }
+    // if (USEWIFI && !client.connected()) {
+    //     Serial.println("Disconnected. Reconnecting...");
+    //     while (!client.connect(host, port)) {
+    //         delay(500);
+    //     }
+    //     Serial.println("connected!");
+    // }
 
-    if (USEWIFI && client.available()) {
-        String command = client.readStringUntil('\n');
-        command.trim();
+    // if (USEWIFI && client.available()) {
+    //     String command = client.readStringUntil('\n');
+    //     command.trim();
 
-        if (command.length() > 0) {
-            Serial.println("Received command: " + command);
-            handleCommand(command);
-        }
-    }
+    //     if (command.length() > 0) {
+    //         Serial.println("Received command: " + command);
+    //         handleCommand(command);
+    //     }
+    // }
 
     // DSTWR_tag_loop();
-    SSTWR_tag_loop();
+    // SSTWR_tag_loop();
+
+    dwm.ds_sendFrame(1, TAG_ID, 1);
+    uint64_t poll_tx = dwm.readTXTimestamp();
+    
+    // wait for response
+    while(!(rx_status = dwm.receivedFrameSucc())){ }
+
+    dwm.clearSystemStatus();
+
+    if(rx_status == 1){
+        uint64_t resp_rx = dwm.readRXTimestamp() & 0xFFFFFFFF;
+
+        long double clk_offset = dwm.getClockOffset();
+        long double clock_offset = 1.0 - clk_offset;
+
+        int64_t t_reply = dwm.read(RX_BUFFER_0_REG, 0x03);
+        Serial.print("reply "); Serial.println(t_reply);
+
+        uint64_t t_round = poll_tx - resp_rx;
+        Serial.print("round "); Serial.println(t_round);
+
+        double tof = ((t_round - t_reply * clock_offset) / 2.0) * DWT_TIME_UNITS;
+        Serial.print("tof "); Serial.println(tof);
+        double t_prop_cm = tof * SPEED_OF_LIGHT_MF;
+        
+        if (true || t_prop_cm >= 0)
+        {
+            // printDouble(t_prop_cm, 100, false); // second value sets the decimal places. 100 = 2 decimal places, 1000 = 3, 10000 = 4, ...
+            Serial.print(t_prop_cm);
+            Serial.println("cm");
+        }
+    }else{
+        Serial.println("RX error");
+        diagnostic();
+        delay(10000);
+    }
+    Serial.println();
+    delay(1);
+
+    if(nloop == 2000){
+        diagnostic();
+        delay(30000);
+    }
     
 }
 

@@ -180,6 +180,7 @@ void DWM3000Class::begin()
     delay(5);
     pinMode(this->config.csPin, OUTPUT);
     this->config.spi.begin(this->config.sckPin, this->config.misoPin, this->config.mosiPin, this->config.csPin);
+    // this->config.spi.setFrequency(8000000L);
     // this->config.spi.begin();
 
     delay(5);

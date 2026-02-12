@@ -1,18 +1,10 @@
-#include <Arduino.h>
 
-// put function declarations here:
-int myFunction(int, int);
+#pragma once
 
-void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
-}
+#ifdef TAGCODE
+#include "tag.h"
+#endif
 
-void loop() {
-  // put your main code here, to run repeatedly:
-}
-
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
-}
+#ifdef ANCHORCODE
+#include "anchor.h"
+#endif

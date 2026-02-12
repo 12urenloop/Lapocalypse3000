@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Dw3000/src/dw3000.h>
+#include <connectivity/debugserver.h>
 
 #define APP_NAME "SS TWR RESP v1.0"
 
@@ -117,6 +118,7 @@ void setup() {
 }
 
 void loop() {
+        debugserver_loop();
         /* Activate reception immediately. */
         dwt_rxenable(DWT_START_RX_IMMEDIATE);
 

@@ -33,13 +33,13 @@ static dwt_config_t config = {
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
 static uint8_t rx_poll_msg[] = {0x01, 0x02, 0xE0, 0, 0};
-// layout: sender, receiver, message code, seq number 2 bytes, response delay 4 bytes.
+// layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes.
 static uint8_t tx_resp_msg[] = {0x02, 0x01, 0xE1, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 #define ALL_MSG_COMMON_LEN 3
 /* Index to access some of the fields in the frames involved in the process. */
-#define ALL_MSG_SN_IDX 3
-#define RES_MSG_DELAY_IDX 5
+#define ALL_MSG_SN_IDX 7
+#define RES_MSG_DELAY_IDX 3
 #define RESP_MSG_TS_LEN 4
 /* Frame sequence number, incremented after each transmission. */
 static uint8_t frame_seq_nb = 0;
@@ -169,7 +169,7 @@ void loop() {
                     resp_msg_set_ts(&tx_resp_msg[RES_MSG_DELAY_IDX], resptime);
 
                     /* Write and send the response message. See NOTE 9 below. */
-                    tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+                    // tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
                     dwt_writetxdata(sizeof(tx_resp_msg), tx_resp_msg, 0); /* Zero offset in TX buffer. */
                     dwt_writetxfctrl(sizeof(tx_resp_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
                     ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);

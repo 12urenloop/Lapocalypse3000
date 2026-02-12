@@ -34,23 +34,23 @@ static dwt_config_t config = {
 #define RX_ANT_DLY 16350
 
 /* Frames used in the ranging process. See NOTE 3 below. */
-static uint8_t tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8_t rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
+// layout: sender, receiver, message code, seq number 2 bytes.
+static uint8_t tx_poll_msg[] = {0x01, 0x02, 0xE0, 0, 0};
+// layout: sender, receiver, message code, seq number 2 bytes, response delay 4 bytes.
+static uint8_t rx_resp_msg[] = {0x02, 0x01, 0xE1, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 // #define ALL_MSG_COMMON_LEN 10
-#define ALL_MSG_COMMON_LEN 10
+#define ALL_MSG_COMMON_LEN 3
 /* Indexes to access some of the fields in the frames defined above. */
-#define ALL_MSG_SN_IDX 2
-#define RESP_MSG_POLL_RX_TS_IDX 10
-#define RESP_MSG_RESP_TX_TS_IDX 14
-#define RES_MSG_DELAY_IDX 10
+#define ALL_MSG_SN_IDX 3
+#define RES_MSG_DELAY_IDX 5
 #define RESP_MSG_TS_LEN 4
 /* Frame sequence number, incremented after each transmission. */
 static uint8_t frame_seq_nb = 0;
 
 /* Buffer to store received response message.
  * Its size is adjusted to longest frame that this example code is supposed to handle. */
-#define RX_BUF_LEN 16
+#define RX_BUF_LEN 12
 static uint8_t rx_buffer[RX_BUF_LEN];
 
 /* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
@@ -149,7 +149,7 @@ void loop()
     debugserver_loop();
 
     /* Write frame data to DW IC and prepare transmission. See NOTE 7 below. */
-    tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+    // tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
     dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. */
     dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);          /* Zero offset in TX buffer, ranging. */
@@ -224,6 +224,13 @@ void loop()
                 // printf("TOF: %f \n", tof * 100000);
                 distance = tof * SPEED_OF_LIGHT;
 
+                Serial.print("rx_buffer: ");
+                for (int i = 0; i < frame_len; i++) {
+                    Serial.print(rx_buffer[i], HEX);
+                    Serial.print(" ");
+                }
+                Serial.println();
+
                 /* Display computed distance on LCD. */
                 snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
                 // UART_puts("DIST\r\n");
@@ -238,6 +245,8 @@ void loop()
     }
     else
     {
+        Serial.println("RX error");
+        Serial.println(status_reg, HEX);
         /* Clear RX error/timeout events in the DW IC status register. */
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
     }

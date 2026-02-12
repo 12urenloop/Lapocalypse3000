@@ -31,20 +31,22 @@ static dwt_config_t config = {
 #define RX_ANT_DLY 16350
 
 /* Frames used in the ranging process. See NOTE 3 below. */
-static uint8_t rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8_t tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
+// layout: sender, receiver, message code, seq number 2 bytes.
+static uint8_t rx_poll_msg[] = {0x01, 0x02, 0xE0, 0, 0};
+// layout: sender, receiver, message code, seq number 2 bytes, response delay 4 bytes.
+static uint8_t tx_resp_msg[] = {0x02, 0x01, 0xE1, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
-#define ALL_MSG_COMMON_LEN 10
+#define ALL_MSG_COMMON_LEN 3
 /* Index to access some of the fields in the frames involved in the process. */
-#define ALL_MSG_SN_IDX 2
-#define RES_MSG_DELAY_IDX 10
+#define ALL_MSG_SN_IDX 3
+#define RES_MSG_DELAY_IDX 5
 #define RESP_MSG_TS_LEN 4
 /* Frame sequence number, incremented after each transmission. */
 static uint8_t frame_seq_nb = 0;
 
 /* Buffer to store received messages.
  * Its size is adjusted to longest frame that this example code is supposed to handle. */
-#define RX_BUF_LEN 12//Must be less than FRAME_LEN_MAX_EX
+#define RX_BUF_LEN 5//Must be less than FRAME_LEN_MAX_EX
 static uint8_t rx_buffer[RX_BUF_LEN];
 
 /* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
@@ -188,11 +190,23 @@ void loop() {
                         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
                         frame_seq_nb++;
                     }
+                }else{
+                    Serial.println("no match");
+                    Serial.print("rx_buffer: ");
+                    for (int i = 0; i < frame_len; i++) {
+                        Serial.print(rx_buffer[i], HEX);
+                        Serial.print(" ");
+                    }
+                    Serial.println();
                 }
+            }else{
+                Serial.println("framelen not ok");
             }
         }
         else
         {
+            Serial.println("RX error");
+            Serial.println(status_reg);
             /* Clear RX error events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
         }

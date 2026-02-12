@@ -35,20 +35,22 @@ static dwt_config_t config = {
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 static uint8_t tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8_t rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8_t rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
+// #define ALL_MSG_COMMON_LEN 10
 #define ALL_MSG_COMMON_LEN 10
 /* Indexes to access some of the fields in the frames defined above. */
 #define ALL_MSG_SN_IDX 2
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
+#define RES_MSG_DELAY_IDX 10
 #define RESP_MSG_TS_LEN 4
 /* Frame sequence number, incremented after each transmission. */
 static uint8_t frame_seq_nb = 0;
 
 /* Buffer to store received response message.
  * Its size is adjusted to longest frame that this example code is supposed to handle. */
-#define RX_BUF_LEN 20
+#define RX_BUF_LEN 16
 static uint8_t rx_buffer[RX_BUF_LEN];
 
 /* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
@@ -194,6 +196,7 @@ void loop()
             if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
             {
                 uint32_t poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
+                uint32_t uint_rtd_resp;
                 int32_t rtd_init, rtd_resp;
                 float clockOffsetRatio;
 
@@ -205,12 +208,14 @@ void loop()
                 clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
 
                 /* Get timestamps embedded in response message. */
-                resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
-                resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
+                // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
+                // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
+                resp_msg_get_ts(&rx_buffer[RES_MSG_DELAY_IDX], &uint_rtd_resp);
 
                 /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
                 rtd_init = resp_rx_ts - poll_tx_ts;
-                rtd_resp = resp_tx_ts - poll_rx_ts;
+                // rtd_resp = resp_tx_ts - poll_rx_ts;
+                rtd_resp = uint_rtd_resp;
 
                 // printf("rtd_resp: %d \n", rtd_init);
                 // printf("rtd_resp: %d \n", rtd_resp);
@@ -224,7 +229,11 @@ void loop()
                 // UART_puts("DIST\r\n");
                 // Serial.println("dist");
                 test_run_info((unsigned char *)dist_str);
+            }else{
+                Serial.println("no match");
             }
+        }else{
+            Serial.println("framelen not ok");
         }
     }
     else

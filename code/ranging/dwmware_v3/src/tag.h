@@ -32,13 +32,12 @@ static dwt_config_t config = {
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 static uint8_t rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8_t tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8_t tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 #define ALL_MSG_COMMON_LEN 10
 /* Index to access some of the fields in the frames involved in the process. */
 #define ALL_MSG_SN_IDX 2
-#define RESP_MSG_POLL_RX_TS_IDX 10
-#define RESP_MSG_RESP_TX_TS_IDX 14
+#define RES_MSG_DELAY_IDX 10
 #define RESP_MSG_TS_LEN 4
 /* Frame sequence number, incremented after each transmission. */
 static uint8_t frame_seq_nb = 0;
@@ -160,9 +159,12 @@ void loop() {
                     /* Response TX timestamp is the transmission time we programmed plus the antenna delay. */
                     resp_tx_ts = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
 
+                    uint64_t resptime = resp_tx_ts - poll_rx_ts;
+
                     /* Write all timestamps in the final message. See NOTE 8 below. */
-                    resp_msg_set_ts(&tx_resp_msg[RESP_MSG_POLL_RX_TS_IDX], poll_rx_ts);
-                    resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], resp_tx_ts);
+                    // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_POLL_RX_TS_IDX], poll_rx_ts);
+                    // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], resp_tx_ts);
+                    resp_msg_set_ts(&tx_resp_msg[RES_MSG_DELAY_IDX], resptime);
 
                     /* Write and send the response message. See NOTE 9 below. */
                     tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;

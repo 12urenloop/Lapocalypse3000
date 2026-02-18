@@ -3,17 +3,23 @@
 #include <Dw3000/src/dw3000.h>
 #include <connectivity/debugserver.h>
 #include <types/taginfo.h>
+#include <boards.h>
 
 #define APP_NAME "SS TWR INIT v1.0"
 
 // connection pins
-// const uint8_t PIN_RST = 27; // reset pin
-// const uint8_t PIN_IRQ = 14; // irq pin
-// const uint8_t PIN_SS = 4;   // spi select 
 
+#if BOARD==UPESY
+const uint8_t PIN_RST = 27; // reset pin
+const uint8_t PIN_IRQ = 14; // irq pin
+const uint8_t PIN_SS = 4;   // spi select 
+#endif
+
+#if BOARD==WEMOSUNO
 const uint8_t PIN_RST = 14; // reset pin
 const uint8_t PIN_IRQ = 12; // irq pin
 const uint8_t PIN_SS = 5; // spi select pin
+#endif
 
 ESPNowMeshClock meshClock;
 
@@ -96,10 +102,14 @@ static double distance;
  * temperature. These values can be calibrated prior to taking reference measurements. See NOTE 2 below. */
 extern dwt_txconfig_t txconfig_options;
 
+
 void setup()
 {
     UART_init();
     test_run_info((unsigned char *)APP_NAME);
+
+    Serial.print("ANCHOR ID: "); Serial.println(ANCHOR_ID);
+    Serial.print("BOARD ID: "); Serial.println(BOARD);
 
     /* Configure SPI rate, DW3000 supports up to 38 MHz */
     /* Reset DW IC */
@@ -150,14 +160,72 @@ void setup()
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
     unsigned int rx_timeout = 100000;
     dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
+    
+
+    meshClock.begin();
 }
 
+void SSTWR_measuredistance();
+
 unsigned long lastreport = 0;
+uint32_t slotIntervalMS = 100;
+uint32_t slotOffsetMS = 50;
+uint32_t mySlotOffsetMS = (ANCHOR_ID - 1) * slotOffsetMS;
+uint32_t nextSlot = mySlotOffsetMS;
+static SyncState lastState = SyncState::ALONE;
 
 void loop()
 {
     debugserver_loop();
 
+    // IMPORTANT: Call this regularly to handle broadcasts
+    meshClock.loop();
+    
+    // Monitor and display sync state changes
+    SyncState currentState = meshClock.getSyncState();
+    
+    if (currentState != lastState) {
+        lastState = currentState;
+        
+        Serial.print(">>> State Change: ");
+        switch(currentState) {
+            case SyncState::ALONE:
+                Serial.println("ALONE - Waiting for first sync message...");
+                break;
+            case SyncState::SYNCED:
+                Serial.println("SYNCED - Successfully synchronized with mesh!");
+                break;
+            case SyncState::LOST:
+                Serial.println("LOST - No sync messages received recently!");
+                break;
+        }
+    }
+
+    // Synchronized LED pulse every second
+    // All nodes will pulse their LED at EXACTLY the same time
+    // Perfect for visual validation or oscilloscope measurement
+    uint32_t meshMs = meshClock.meshMillis();
+    nextSlot = meshMs - (meshMs % slotIntervalMS) + slotIntervalMS + mySlotOffsetMS;  // Schedule next pulse
+    long TimeToSlotMS = (long)nextSlot - (long)meshMs;
+    while(TimeToSlotMS < 0){
+        TimeToSlotMS += slotIntervalMS;
+    }
+
+    // long offset = (long)meshMs - (long)nextSlot;
+    if(TimeToSlotMS > 0) delayMicroseconds(TimeToSlotMS * 1000);
+    
+    // Check if it's time for a pulse (every 1000ms)
+    if (true) {
+        SSTWR_measuredistance();
+    }
+
+    
+
+    /* Execute a delay between ranging exchanges. */
+    // Sleep(1);
+}
+
+void SSTWR_measuredistance(){
     /* Write frame data to DW IC and prepare transmission. See NOTE 7 below. */
     // tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
@@ -268,9 +336,6 @@ void loop()
         TagInfo infos[] = { {1, distance} };
         sendData(1, infos);
     }
-
-    /* Execute a delay between ranging exchanges. */
-    // Sleep(1);
 }
 
 /*****************************************************************************************************************************************************

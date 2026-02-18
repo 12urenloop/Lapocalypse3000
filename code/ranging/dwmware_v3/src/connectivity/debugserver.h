@@ -160,7 +160,7 @@ void sendData(int numtags, TagInfo taginfos[])
     {
         TagInfo tag = taginfos[i];
         data += "\"T" + String(tag.tagID) + "\":{";
-        data += "\"distance\":" + String(tag.distance, 2);
+        data += "\"distance\":" + String(tag.distance * 100.0, 2);
         // data += ",\"raw\":" + String(anchors[i].distance, 2) + ",";
         // data += "\"rssi\":" + String(anchors[i].signal_strength, 2) + ",";
         // data += "\"fp_rssi\":" + String(anchors[i].fp_signal_strength, 2) + ",";

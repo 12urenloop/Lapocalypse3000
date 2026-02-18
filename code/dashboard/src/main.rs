@@ -1,6 +1,9 @@
+mod triangulation;
+
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_metrics_dashboard::{DashboardPlugin, DashboardWindow, RegistryPlugin};
+use triangulation::TriangulationPlugin;
 use metrics::{
     counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram, Unit,
 };
@@ -60,6 +63,7 @@ fn main() {
         .add_plugins(EguiPlugin::default())
         .add_plugins(RegistryPlugin::default())
         .add_plugins(DashboardPlugin)
+        .add_plugins(TriangulationPlugin)
         .insert_resource(MqttReceiver { messages })
         .add_systems(Startup, (describe_metrics, create_dashboard))
         .add_systems(Update, (update_metrics, process_mqtt_messages))

@@ -1,13 +1,19 @@
 #include <Arduino.h>
 #include <Dw3000/src/dw3000.h>
+
+#define USEWIFI false
 #include <connectivity/debugserver.h>
 
 #define APP_NAME "SS TWR RESP v1.0"
 
 // connection pins
-const uint8_t PIN_RST = 27; // reset pin
-const uint8_t PIN_IRQ = 14; // irq pin
-const uint8_t PIN_SS = 4; // spi select pin
+// const uint8_t PIN_RST = 27; // reset pin
+// const uint8_t PIN_IRQ = 14; // irq pin
+// const uint8_t PIN_SS = 4; // spi select pin
+
+const uint8_t PIN_RST = 14; // reset pin
+const uint8_t PIN_IRQ = 12; // irq pin
+const uint8_t PIN_SS = 5; // spi select pin
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
@@ -74,6 +80,7 @@ static uint64_t resp_tx_ts;
 extern dwt_txconfig_t txconfig_options;
 
 void setup() {
+    delay(4000);
   UART_init();
   test_run_info((unsigned char *)APP_NAME);
 
@@ -116,6 +123,8 @@ void setup() {
     /* Next can enable TX/RX states output on GPIOs 5 and 6 to help debug, and also TX/RX LEDs
      * Note, in real low power applications the LEDs should not be used. */
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE); 
+
+    Serial.println("entering loop");
 }
 
 void loop() {

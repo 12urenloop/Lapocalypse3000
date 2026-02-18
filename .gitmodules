@@ -1,3 +1,6 @@
 [submodule "code/ranging/dwmware_v3/lib/ESP32-UWB-DW3000"]
 	path = code/ranging/dwmware_v3/lib/ESP32-UWB-DW3000
 	url = https://github.com/robinpdev/ESP32-UWB-DW3000.git
+[submodule "code/ranging/dwmware_v3/lib/ESPNowMeshClock"]
+	path = code/ranging/dwmware_v3/lib/ESPNowMeshClock
+	url = git@github.com:robinpdev/ESPNowMeshClock.git

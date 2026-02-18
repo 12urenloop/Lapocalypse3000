@@ -1,5 +1,4 @@
 
-#pragma once
 
 #ifdef TAGCODE
 #include "tag.h"

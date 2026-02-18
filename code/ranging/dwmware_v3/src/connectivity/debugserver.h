@@ -1,12 +1,21 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <Dw3000/src/dw3000.h>
+#include <types/taginfo.h>
 
 
 #include <env/wificonfig.h>
 
 #ifndef USEWIFI
 #define USEWIFI true
+#endif
+
+#ifndef TAG_ID
+#define TAG_ID 0
+#endif
+
+#ifndef ANCHOR_ID
+#define ANCHOR_ID 0
 #endif
 
 const int port = 7007; // Choose a port number
@@ -109,6 +118,25 @@ void handleCommand(const String &cmd)
     }
 }
 
+void ensureConnection(){
+    if (!wifiConnected)
+    {
+        connectToWiFi();
+        if (!wifiConnected)
+            return;
+    }
+
+    if (!client.connected())
+    {
+        Serial.println("Disconnected. Reconnecting...");
+        while (!client.connect(host, port))
+        {
+            delay(500);
+        }
+        Serial.println("connected!");
+    }
+}
+
 void diagnostic()
 {
     for (int base = 0; base <= 10; base++)
@@ -121,34 +149,59 @@ void diagnostic()
     }
 }
 
+void sendData(int numtags, TagInfo taginfos[])
+{
+    ensureConnection();
+
+    // Create JSON structure dynamically based on number of anchors
+    String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ",\"tags\":{";
+
+    for (int i = 0; i < numtags; i++)
+    {
+        TagInfo tag = taginfos[i];
+        data += "\"T" + String(tag.tagID) + "\":{";
+        data += "\"distance\":" + String(tag.distance, 2);
+        // data += ",\"raw\":" + String(anchors[i].distance, 2) + ",";
+        // data += "\"rssi\":" + String(anchors[i].signal_strength, 2) + ",";
+        // data += "\"fp_rssi\":" + String(anchors[i].fp_signal_strength, 2) + ",";
+        // data += "\"round_time\":" + String(anchors[i].t_roundA) + ",";
+        // data += "\"reply_time\":" + String(anchors[i].t_replyA) + ",";
+        // data += "\"clock_offset\":" + String((double)dwm.getClockOffset(anchors[i].clock_offset), 6);
+        data += "}";
+
+        // Add comma if not the last anchor
+        if (i < numtags - 1)
+        {
+            data += ",";
+        }
+    }
+
+    data += "}}\n";
+
+    if(USEWIFI) client.print(data);
+
+    // For debugging, print the JSON to serial
+    // Serial.println("Sent JSON data:");
+    Serial.print(millis());
+    Serial.print(": ");
+    Serial.println(data);
+}
+
 void debugserver_loop()
 {
-    if (USEWIFI && !wifiConnected)
-    {
-        connectToWiFi();
-        if (!wifiConnected)
-            return;
-    }
-
-    if (USEWIFI && !client.connected() && USEWIFI)
-    {
-        Serial.println("Disconnected. Reconnecting...");
-        while (!client.connect(host, port))
+    if(USEWIFI){
+        ensureConnection();    
+    
+        if (client.available())
         {
-            delay(500);
-        }
-        Serial.println("connected!");
-    }
-
-    if (USEWIFI && client.available())
-    {
-        String command = client.readStringUntil('\n');
-        command.trim();
-
-        if (command.length() > 0)
-        {
-            Serial.println("Received command: " + command);
-            handleCommand(command);
+            String command = client.readStringUntil('\n');
+            command.trim();
+    
+            if (command.length() > 0)
+            {
+                Serial.println("Received command: " + command);
+                handleCommand(command);
+            }
         }
     }
 }

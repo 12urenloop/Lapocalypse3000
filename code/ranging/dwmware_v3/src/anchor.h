@@ -1,13 +1,21 @@
 #include <Arduino.h>
+#include <ESPNowMeshClock.h>
 #include <Dw3000/src/dw3000.h>
 #include <connectivity/debugserver.h>
+#include <types/taginfo.h>
 
 #define APP_NAME "SS TWR INIT v1.0"
 
 // connection pins
-const uint8_t PIN_RST = 27; // reset pin
-const uint8_t PIN_IRQ = 14; // irq pin
-const uint8_t PIN_SS = 4;   // spi select pin
+// const uint8_t PIN_RST = 27; // reset pin
+// const uint8_t PIN_IRQ = 14; // irq pin
+// const uint8_t PIN_SS = 4;   // spi select 
+
+const uint8_t PIN_RST = 14; // reset pin
+const uint8_t PIN_IRQ = 12; // irq pin
+const uint8_t PIN_SS = 5; // spi select pin
+
+ESPNowMeshClock meshClock;
 
 /* Default communication configuration. We use default non-STS DW mode. */
 static dwt_config_t config = {
@@ -144,6 +152,8 @@ void setup()
     dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
 }
 
+unsigned long lastreport = 0;
+
 void loop()
 {
     debugserver_loop();
@@ -224,12 +234,12 @@ void loop()
                 // printf("TOF: %f \n", tof * 100000);
                 distance = tof * SPEED_OF_LIGHT;
 
-                Serial.print("rx_buffer: ");
-                for (int i = 0; i < frame_len; i++) {
-                    Serial.print(rx_buffer[i], HEX);
-                    Serial.print(" ");
-                }
-                Serial.println();
+                // Serial.print("rx_buffer: ");
+                // for (int i = 0; i < frame_len; i++) {
+                //     Serial.print(rx_buffer[i], HEX);
+                //     Serial.print(" ");
+                // }
+                // Serial.println();
 
                 /* Display computed distance on LCD. */
                 snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
@@ -249,6 +259,14 @@ void loop()
         Serial.println(status_reg, HEX);
         /* Clear RX error/timeout events in the DW IC status register. */
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+    }
+
+    unsigned long ms = millis();
+    if(ms - lastreport > 200){
+        lastreport = ms;
+
+        TagInfo infos[] = { {1, distance} };
+        sendData(1, infos);
     }
 
     /* Execute a delay between ranging exchanges. */

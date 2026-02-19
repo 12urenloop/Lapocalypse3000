@@ -3,7 +3,8 @@ import mqtt from "mqtt";
 
 const PORT = 7007;
 const MQTT_BROKER = "mqtt://localhost:1883";
-const MQTT_TOPIC = "uwb/distance";
+// const MQTT_TOPIC = "uwb/distance";
+const MQTT_TOPIC = "uwb/anchormsg";
 
 // MQTT client
 const mqttClient = mqtt.connect(MQTT_BROKER);
@@ -32,10 +33,16 @@ const server = net.createServer((socket) => {
             return;
         }else if(data.length > 16) {
             const json = JSON.parse(data.toString('utf-8'));
-            console.log(json)
+            
+            const distancemsg = {
+                anchor_id: json.anchor_id,
+                tag_id: 1,
+                distance: json.tags.T1.distance / 100.0
+            }
+            console.log(distancemsg)
             
             // Publish JSON data to MQTT
-            mqttClient.publish(MQTT_TOPIC, JSON.stringify(json), (err) => {
+            mqttClient.publish(MQTT_TOPIC, JSON.stringify(distancemsg), (err) => {
                 if (err) {
                     console.error("MQTT publish error:", err);
                 }

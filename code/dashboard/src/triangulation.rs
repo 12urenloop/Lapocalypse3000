@@ -1,7 +1,62 @@
-use std::usize::MAX;
-
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+
+// ---------------------------------------------------------------------------
+// Distance measurement event — the universal interface for all providers
+// ---------------------------------------------------------------------------
+
+/// Any distance provider emits this event to feed a new measurement into the
+/// triangulation system. `anchor_index` maps to the anchor list in
+/// [`TriangulationState`] (0 = A, 1 = B, …).
+#[derive(Event, Debug, Clone)]
+pub struct DistanceMeasurement {
+    pub anchor_id: usize,
+    pub distance: f32,
+}
+
+// ---------------------------------------------------------------------------
+// Provider selection
+// ---------------------------------------------------------------------------
+
+/// Identifies a distance-provider implementation.  Add new variants here when
+/// you create a new provider plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum DistanceProviderKind {
+    #[default]
+    Manual,
+    Mqtt,
+}
+
+impl std::fmt::Display for DistanceProviderKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Manual => write!(f, "Manual"),
+            Self::Mqtt => write!(f, "MQTT"),
+        }
+    }
+}
+
+/// Resource that controls which provider's measurements are accepted.
+#[derive(Resource)]
+pub struct ActiveDistanceProvider {
+    pub kind: DistanceProviderKind,
+    /// List of providers that have been registered (for the UI combo-box).
+    pub available: Vec<DistanceProviderKind>,
+}
+
+impl Default for ActiveDistanceProvider {
+    fn default() -> Self {
+        Self {
+            kind: DistanceProviderKind::Manual,
+            // Manual is always available; other providers register themselves.
+            available: vec![DistanceProviderKind::Manual],
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Triangulation plugin
+// ---------------------------------------------------------------------------
 
 /// Plugin that triangulates a point in 2D from distances to two anchors
 /// and visualizes the result.
@@ -10,11 +65,16 @@ pub struct TriangulationPlugin;
 impl Plugin for TriangulationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TriangulationState>()
-            // .add_plugins(EguiPlugin::default())
-            .add_systems(Update, (draw_triangulation))
-            .add_systems(EguiPrimaryContextPass, (ui_example_system, triangulation_ui));
+            .init_resource::<ActiveDistanceProvider>()
+            .add_event::<DistanceMeasurement>()
+            .add_systems(Update, (consume_distance_events, draw_triangulation).chain())
+            .add_systems(EguiPrimaryContextPass, triangulation_ui);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Triangulation state
+// ---------------------------------------------------------------------------
 
 /// Holds anchor positions, measured distances, and the computed result.
 #[derive(Resource)]
@@ -45,12 +105,33 @@ impl Default for TriangulationState {
     }
 }
 
-fn ui_example_system(mut contexts: EguiContexts) -> Result {
-    egui::Window::new("Hello").show(contexts.ctx_mut()?, |ui| {
-        ui.label("world");
-    });
-    Ok(())
+// ---------------------------------------------------------------------------
+// Consume distance events from whichever provider is active
+// ---------------------------------------------------------------------------
+
+fn consume_distance_events(
+    mut events: EventReader<DistanceMeasurement>,
+    provider: Res<ActiveDistanceProvider>,
+    mut state: ResMut<TriangulationState>,
+) {
+    // When in Manual mode the UI writes directly to state, so we skip events.
+    if provider.kind == DistanceProviderKind::Manual {
+        events.clear();
+        return;
+    }
+
+    for ev in events.read() {
+        match ev.anchor_id {
+            1 => state.distance_a = ev.distance,
+            2 => state.distance_b = ev.distance,
+            _ => warn!("DistanceMeasurement for unknown anchor_index {}", ev.anchor_id),
+        }
+    }
 }
+
+// ---------------------------------------------------------------------------
+// Math
+// ---------------------------------------------------------------------------
 
 /// 2D trilateration: find the intersection of two circles.
 ///
@@ -63,17 +144,14 @@ fn trilaterate_2d(a: Vec2, r1: f32, b: Vec2, r2: f32) -> Option<(Vec2, Vec2)> {
     let d_vec = b - a;
     let d = d_vec.length();
 
-    // No solution if circles are too far apart or one contains the other
     if d > r1 + r2 || d < (r1 - r2).abs() || d < 1e-9 {
         return None;
     }
 
-    // Distance from a along the line a->b to the midpoint of intersections
     let x = (r1 * r1 - r2 * r2 + d * d) / (2.0 * d);
     let y_sq = r1 * r1 - x * x;
     let y = if y_sq < 0.0 { 0.0 } else { y_sq.sqrt() };
 
-    // Unit vectors: ex along a->b, ey perpendicular
     let ex = d_vec / d;
     let ey = Vec2::new(-ex.y, ex.x);
 
@@ -83,16 +161,40 @@ fn trilaterate_2d(a: Vec2, r1: f32, b: Vec2, r2: f32) -> Option<(Vec2, Vec2)> {
     Some((p1, p2))
 }
 
-/// egui window for editing anchor positions and distances.
-fn triangulation_ui(mut contexts: EguiContexts, mut state: ResMut<TriangulationState>) {
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
+
+/// egui window for editing anchor positions, distances, and provider selection.
+fn triangulation_ui(
+    mut contexts: EguiContexts,
+    mut state: ResMut<TriangulationState>,
+    mut provider: ResMut<ActiveDistanceProvider>,
+) {
     let Ok(ctx) = contexts.ctx_mut() else {
         return;
     };
+
     egui::Window::new("Triangulation")
-        .default_width(280.0)
+        .default_width(300.0)
         .show(ctx, |ui| {
-            ui.heading("Anchors");
+            // ----- Provider selector -----
+            ui.heading("Distance Provider");
+            {
+                let current_label = provider.kind.to_string();
+                egui::ComboBox::from_label("Source")
+                    .selected_text(&current_label)
+                    .show_ui(ui, |ui| {
+                        for &kind in &provider.available.clone() {
+                            ui.selectable_value(&mut provider.kind, kind, kind.to_string());
+                        }
+                    });
+            }
+
             ui.separator();
+
+            // ----- Anchors (always editable) -----
+            ui.heading("Anchors");
 
             ui.horizontal(|ui| {
                 ui.label("Anchor A  x:");
@@ -109,23 +211,35 @@ fn triangulation_ui(mut contexts: EguiContexts, mut state: ResMut<TriangulationS
             });
 
             ui.separator();
+
+            // ----- Distances -----
             ui.heading("Distances");
+
+            let manual = provider.kind == DistanceProviderKind::Manual;
 
             ui.horizontal(|ui| {
                 ui.label("d(A → P):");
-                ui.add(
-                    egui::DragValue::new(&mut state.distance_a)
-                        .speed(0.05)
-                        .range(0.0..=f32::MAX),
-                );
+                if manual {
+                    ui.add(
+                        egui::DragValue::new(&mut state.distance_a)
+                            .speed(0.05)
+                            .range(0.0..=f32::MAX),
+                    );
+                } else {
+                    ui.label(format!("{:.4}", state.distance_a));
+                }
             });
             ui.horizontal(|ui| {
                 ui.label("d(B → P):");
-                ui.add(
-                    egui::DragValue::new(&mut state.distance_b)
-                        .speed(0.05)
-                        .range(0.0..=f32::MAX),
-                );
+                if manual {
+                    ui.add(
+                        egui::DragValue::new(&mut state.distance_b)
+                            .speed(0.05)
+                            .range(0.0..=f32::MAX),
+                    );
+                } else {
+                    ui.label(format!("{:.4}", state.distance_b));
+                }
             });
 
             ui.separator();
@@ -140,7 +254,20 @@ fn triangulation_ui(mut contexts: EguiContexts, mut state: ResMut<TriangulationS
                 );
             });
 
-            // Solve
+            if ui.button("Auto scale").clicked() {
+                // Maximum distance between 2 points for auto scaling
+                let mut maxdist = (state.anchor_a - state.anchor_b).length();
+                if let Some((p1, p2)) = state.solutions {
+                    maxdist = maxdist.max((state.anchor_a - p1).length());
+                    maxdist = maxdist.max((state.anchor_b - p1).length());
+                    maxdist = maxdist.max((state.anchor_a - p2).length());
+                    maxdist = maxdist.max((state.anchor_b - p2).length());
+                }
+                    
+                state.scale = TriangulationState::default().scale / (maxdist / 2.0);
+            }
+
+            // ----- Solve -----
             state.solutions = trilaterate_2d(
                 state.anchor_a,
                 state.distance_a,
@@ -169,17 +296,9 @@ fn triangulation_ui(mut contexts: EguiContexts, mut state: ResMut<TriangulationS
 
 /// Draw anchors, distance circles, and the estimated position using gizmos.
 fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
-    let mut maxdist = ((state.anchor_a - state.anchor_b).length());
 
-    if let Some((p1, p2)) = state.solutions {
-        maxdist = maxdist.max((state.anchor_a - p1).length());
-        maxdist = maxdist.max((state.anchor_b - p1).length());
-        maxdist = maxdist.max((state.anchor_a - p2).length());
-        maxdist = maxdist.max((state.anchor_b - p2).length());
-    }
-        
-    // let s = state.scale;
-    let s = state.scale / (maxdist / 2.0);
+    
+    let s = state.scale;
 
     let a_screen = state.anchor_a * s;
     let b_screen = state.anchor_b * s;

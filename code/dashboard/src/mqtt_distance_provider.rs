@@ -137,6 +137,7 @@ fn forward_mqtt_to_events(
         for payload in buf.drain(..) {
             events.write(DistanceMeasurement {
                 anchor_id: payload.anchor_id,
+                tag_id: payload.tag_id,
                 distance: payload.distance,
             });
         }

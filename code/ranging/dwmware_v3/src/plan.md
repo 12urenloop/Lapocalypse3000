@@ -1,5 +1,9 @@
 
 
 - distance reporting ok
-- syncing
+- syncing ok
+- SSTWR antenna delay calibration
+- kalman filter
+- update frequency increase
+- support multiple tags in vis
 - addressing

@@ -25,7 +25,7 @@ bool wifiConnected = false;
 void connectToWiFi()
 {
     Serial.println("Connecting to WiFi...");
-    WiFi.begin(ssid, password);
+    // WiFi.begin(ssid, password);
 
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20)

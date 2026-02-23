@@ -25,20 +25,23 @@ Het doel is om bij de volgende editie van 12Urenloop een kleine test/demonstrati
 # Vooruitgang
 
 - [x] Aankoop van 5 UWB modules (~150 euro inclusief BTW), nu eigendom van Zeus WPI.
+- [x] Afstandsmetingen tussen 2 modules tot op een afstand van 40 meter.
 - [x] Afstandsmetingen tussen 2 modules met een snelheid van 100+ metingen per seconde en een meetfout van ~15cm.
 - [x] Afstandsmetingen tussen 2 modules met een snelheid van 600+ metingen per seconde, meetfout nog te bepalen maar rond of minder dan 50cm.
 - [x] Draadloze timingdistributie tussen stations (nodig om hoge meetsnelheid te behalen) met een betrouwbaarheid van minder dan 0,0005 seconden.
+- [x] Positiemeting van 2 modules in realtime (10 metingen per seconde, kan nog hoger)
 
 # Roadmap
 
 - [ ] Al deze elementen combineren in een volwaardig positioneringsysteem
 - [ ] Software schrijven voor gebruik als een tel, tracking en timingsysteem
+- [ ] Integratie in bestaande batons en meetstations
 - [ ] Betrouwbaarheidstesting
 
 # Materiaal
 
 ### Extra hardware nodig voor een baton:
-- [DWM3000 module](https://www.digikey.com/en/products/detail/qorvo/DWM3000TR13/24367995): ~€20
+- [DWM3000 module](https://www.digikey.com/en/products/detail/qorvo/DWM3000TR13/24367995): ~€20, laagste prijs gevonden is 14 euro
     - Dit zal waarschijnlijk veranderd worden naar een [DWM3001C module](https://www.digikey.be/nl/products/detail/qorvo/DWM3001CSR/25862594): ~€25
 - Misschien nog een kleine zelf ontworpen printplaat
 

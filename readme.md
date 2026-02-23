@@ -10,11 +10,14 @@
 - [ ] Multi Tag multi Anchor (this is a big one!)
     - [x] Refactor DW3000 API
     - [x] Test SSTWR (single side two way ranging)
-    - [ ] Timing / power measurements
     - [x] Design multi tag method
-    - [ ] Implement multi tag method
-    - [ ] Testing
+    - [x] Implement multi tag method
+    - [ ] Calibration of positioning
+    - [ ] Timing / power measurements
     - [ ] precision / reliability / throughput / latency measurements
+- [ ] Integrate into batons
+- [ ] Integrate into stations
+- [ ] Lap counting/timing/tracking system
 
 
 ## code/controlserver

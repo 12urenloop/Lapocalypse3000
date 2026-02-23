@@ -38,9 +38,9 @@ static dwt_config_t config = {
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
-static uint8_t rx_poll_msg[] = {0x01, 0x02, 0xE0, 0, 0};
+static uint8_t rx_poll_msg[] = {0x01, 0xA0 + TAG_ID, 0xE0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes.
-static uint8_t tx_resp_msg[] = {0x02, 0x01, 0xE1, 0, 0, 0, 0, 0, 0};
+static uint8_t tx_resp_msg[] = {0xA0 + TAG_ID, 0x01, 0xE1, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 #define ALL_MSG_COMMON_LEN 3
 /* Index to access some of the fields in the frames involved in the process. */
@@ -154,7 +154,8 @@ void loop() {
                 /* Check that the frame is a poll sent by "SS TWR initiator" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
                 rx_buffer[ALL_MSG_SN_IDX] = 0;
-                if (memcmp(rx_buffer, rx_poll_msg, ALL_MSG_COMMON_LEN) == 0)
+                // if (memcmp(rx_buffer + 1, rx_poll_msg + 1, ALL_MSG_COMMON_LEN - 1) == 0)
+                if (rx_buffer[1] == 0xA0 + TAG_ID)
                 {
                     // UART_puts("CHECK\r\n");
                     uint32_t resp_tx_time;
@@ -179,6 +180,7 @@ void loop() {
 
                     /* Write and send the response message. See NOTE 9 below. */
                     // tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+                    tx_resp_msg[1] = rx_buffer[0]; // receiver is the sender of the received packet
                     dwt_writetxdata(sizeof(tx_resp_msg), tx_resp_msg, 0); /* Zero offset in TX buffer. */
                     dwt_writetxfctrl(sizeof(tx_resp_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
                     ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
@@ -206,6 +208,7 @@ void loop() {
                         Serial.print(rx_buffer[i], HEX);
                         Serial.print(" ");
                     }
+                    Serial.print("comparing to "); Serial.println(0xA0 + TAG_ID, HEX);
                     Serial.println();
                 }
             }else{

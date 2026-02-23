@@ -1,5 +1,3 @@
-#include <ElegantOTA.h>
-
 
 
 #define UPESY 1

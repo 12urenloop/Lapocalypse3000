@@ -1,7 +1,9 @@
+#define USEWIFI true
+
 #include <Arduino.h>
 #include <ESPNowMeshClock.h>
 #include <Dw3000/src/dw3000.h>
-#include <connectivity/debugserver.h>
+#include <connectivity/mqtt_reporter.h>
 #include <types/taginfo.h>
 #include <boards.h>
 
@@ -49,9 +51,9 @@ static dwt_config_t config = {
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
-static uint8_t tx_poll_msg[] = {0x01, 0x02, 0xE0, 0, 0};
+static uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes.
-static uint8_t rx_resp_msg[] = {0x02, 0x01, 0xE1, 0, 0, 0, 0, 0, 0};
+static uint8_t rx_resp_msg[] = {0xA1, 0x0 + ANCHOR_ID, 0xE1, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 // #define ALL_MSG_COMMON_LEN 10
 #define ALL_MSG_COMMON_LEN 3
@@ -163,20 +165,27 @@ void setup()
     
 
     meshClock.begin();
+    mqtt_setup();
 }
 
 void SSTWR_measuredistance();
 
 unsigned long lastreport = 0;
-uint32_t slotIntervalMS = 100;
-uint32_t slotOffsetMS = 50;
+uint32_t slotIntervalMS = 50;
+uint32_t slotOffsetMS = 25;
 uint32_t mySlotOffsetMS = (ANCHOR_ID - 1) * slotOffsetMS;
 uint32_t nextSlot = mySlotOffsetMS;
 static SyncState lastState = SyncState::ALONE;
 
+const unsigned short ntags = 2; // CHANGE FOR MULTI TAG
+uint8_t tagIDs[ntags] = {0xA1, 0xA2};
+double distances[ntags] = {0.0, 0.0};
+unsigned short target_tag_ix = 0;
+
 void loop()
 {
-    debugserver_loop();
+    // debugserver_loop();
+    mqtt_loop();
 
     // IMPORTANT: Call this regularly to handle broadcasts
     meshClock.loop();
@@ -216,7 +225,11 @@ void loop()
     
     // Check if it's time for a pulse (every 1000ms)
     if (true) {
+        tx_poll_msg[1] = tagIDs[target_tag_ix];
+        rx_resp_msg[0] = tagIDs[target_tag_ix];
         SSTWR_measuredistance();
+        target_tag_ix ++;
+        target_tag_ix %= ntags;
     }
 
     
@@ -301,6 +314,7 @@ void SSTWR_measuredistance(){
                 tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
                 // printf("TOF: %f \n", tof * 100000);
                 distance = tof * SPEED_OF_LIGHT;
+                distances[target_tag_ix] = distance;
 
                 // Serial.print("rx_buffer: ");
                 // for (int i = 0; i < frame_len; i++) {
@@ -330,11 +344,12 @@ void SSTWR_measuredistance(){
     }
 
     unsigned long ms = millis();
-    if(ms - lastreport > 200){
+    if(USEWIFI && ms - lastreport > 200){
         lastreport = ms;
 
-        TagInfo infos[] = { {1, distance} };
-        sendData(1, infos);
+        for(int i = 0; i < ntags; i++){
+            sendData(TagInfo{tagIDs[i], distances[i]});
+        }
     }
 }
 

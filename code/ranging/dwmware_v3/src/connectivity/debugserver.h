@@ -2,8 +2,6 @@
 #include <WiFiClient.h>
 #include <Dw3000/src/dw3000.h>
 #include <types/taginfo.h>
-
-
 #include <env/wificonfig.h>
 
 #ifndef USEWIFI
@@ -11,7 +9,7 @@
 #endif
 
 #ifndef TAG_ID
-#define TAG_ID 0
+#define TAG_ID 1
 #endif
 
 #ifndef ANCHOR_ID
@@ -25,7 +23,7 @@ bool wifiConnected = false;
 void connectToWiFi()
 {
     Serial.println("Connecting to WiFi...");
-    // WiFi.begin(ssid, password);
+    WiFi.begin(ssid, password);
 
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20)

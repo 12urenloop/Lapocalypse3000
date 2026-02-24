@@ -1,8 +1,8 @@
 
 #ifdef TAGCODE
-#include "tag.h"
+#include "tag.hpp"
 #endif
 
 #ifdef ANCHORCODE
-#include "anchor.h"
+#include "anchor.hpp"
 #endif

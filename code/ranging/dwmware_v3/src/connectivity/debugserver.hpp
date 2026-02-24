@@ -1,8 +1,8 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <Dw3000/src/dw3000.h>
-#include <types/taginfo.h>
-#include <env/wificonfig.h>
+#include <types/taginfo.hpp>
+#include <env/wificonfig.hpp>
 
 #ifndef USEWIFI
 #define USEWIFI true

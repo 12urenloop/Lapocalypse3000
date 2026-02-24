@@ -3,9 +3,9 @@
 #include <Arduino.h>
 #include <ESPNowMeshClock.h>
 #include <Dw3000/src/dw3000.h>
-#include <connectivity/mqtt_reporter.h>
-#include <types/taginfo.h>
-#include <boards.h>
+#include <connectivity/mqtt_reporter.hpp>
+#include <types/taginfo.hpp>
+#include <boards.hpp>
 
 #define APP_NAME "SS TWR INIT v1.0"
 
@@ -160,7 +160,7 @@ void setup()
     /* Next can enable TX/RX states output on GPIOs 5 and 6 to help debug, and also TX/RX LEDs
      * Note, in real low power applications the LEDs should not be used. */
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
-    unsigned int rx_timeout = 100000;
+    unsigned int rx_timeout = 1000;
     dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
     
 
@@ -244,18 +244,26 @@ void SSTWR_measuredistance(){
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
     dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. */
     dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);          /* Zero offset in TX buffer, ranging. */
-
+    delay(100);
     /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
      * set by dwt_setrxaftertxdelay() has elapsed. */
     dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+    Serial.println("start send");
     // UART_puts("SEND\r\n");
-    // delay(14);
+    delay(10);
+    status_reg = dwt_read32bitreg(SYS_STATUS_ID);
+    Serial.println(status_reg, HEX);
+    Serial.println(dwt_read32bitreg(SYS_STATUS_HI_ID), HEX);
+    Serial.println(dwt_read32bitreg(FINT_STAT_ID), HEX);
 
     /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 8 below. */
     while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
     {
     };
-    // UART_puts("OK\r\n");
+    UART_puts("OK\r\n");
+    Serial.println(status_reg, HEX);
+    uint32_t rxfwto = dwt_read32bitreg(RX_FWTO_ID);
+    Serial.println(rxfwto, HEX);
 
     /* Increment frame sequence number after transmission of the poll message (modulo 256). */
     frame_seq_nb++;
@@ -344,7 +352,7 @@ void SSTWR_measuredistance(){
     }
 
     unsigned long ms = millis();
-    if(USEWIFI && ms - lastreport > 200){
+    if(ms - lastreport > 200){
         lastreport = ms;
 
         for(int i = 0; i < ntags; i++){

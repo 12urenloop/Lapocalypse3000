@@ -1,8 +1,8 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <Dw3000/src/dw3000.h>
-#include <types/taginfo.h>
-#include <env/wificonfig.h>
+#include <types/taginfo.hpp>
+#include <env/wificonfig.hpp>
 #include <PubSubClient.h>
 
 #ifndef USEWIFI
@@ -91,7 +91,7 @@ void sendData(TagInfo taginfo)
     // Create JSON structure dynamically based on number of anchors
     String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ",\"tag_id\":" + String(taginfo.tagID) + ",\"distance\":" + String(taginfo.distance * 100.0, 2) + "}";
 
-    mqttclient.publish("uwb/anchormsg/test", data.c_str());
+    if(USEWIFI) mqttclient.publish("uwb/anchormsg/test", data.c_str());
     // if(USEWIFI) client.print(data);
 
     // For debugging, print the JSON to serial

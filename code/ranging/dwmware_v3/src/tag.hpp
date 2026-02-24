@@ -2,7 +2,7 @@
 #include <Dw3000/src/dw3000.h>
 
 #define USEWIFI false
-#include <connectivity/debugserver.h>
+#include <connectivity/debugserver.hpp>
 
 #define APP_NAME "SS TWR RESP v1.0"
 

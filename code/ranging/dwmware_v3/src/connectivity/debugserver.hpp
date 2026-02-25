@@ -17,13 +17,13 @@
 #endif
 
 const int port = 7007; // Choose a port number
-WiFiClient client;
+WiFiClient debugclient;
 bool wifiConnected = false;
 
-void connectToWiFi()
+void waitForWifi()
 {
-    Serial.println("Connecting to WiFi...");
-    WiFi.begin(ssid, password);
+    // Serial.println("Connecting to WiFi...");
+    // WiFi.begin(ssid, password);
 
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20)
@@ -62,7 +62,7 @@ void handleCommand(const String &cmd)
     {
         if (firstSpace < 0 || secondSpace < 0)
         {
-            client.println("ERR Invalid format. Use: get <reg> <offset>");
+            debugclient.println("ERR Invalid format. Use: get <reg> <offset>");
             return;
         }
 
@@ -71,16 +71,16 @@ void handleCommand(const String &cmd)
 
         // readRegisterBytes(reg, offset, buffer, numBytes);
         // uint32_t value = dwm.read(reg, offset);
-        uint32_t value = dwt_read32bitreg((reg << 12) + offset);
+        uint32_t value = dwt_read32bitreg((reg << 16) + offset);
 
         // Send bytes back
-        client.write((uint8_t *)&value, sizeof(value));
+        debugclient.write((uint8_t *)&value, sizeof(value));
     }
     else if (action == "set")
     {
         if (firstSpace < 0 || secondSpace < 0 || thirdSpace < 0)
         {
-            client.println("ERR Invalid format. Use: set <reg> <offset>");
+            debugclient.println("ERR Invalid format. Use: set <reg> <offset>");
             return;
         }
 
@@ -90,14 +90,14 @@ void handleCommand(const String &cmd)
         uint32_t data = cmd.substring(thirdSpace + 1).toInt();
 
         // dwm.write(reg, offset, data);
-        dwt_write32bitreg((reg << 12) + offset, data);
-        client.write("set OK");
+        dwt_write32bitreg((reg << 16) + offset, data);
+        debugclient.write("set OK");
     }
     else if (action == "otp")
     {
         if (firstSpace < 0)
         {
-            client.println("ERR Invalid format. Use: otp <reg>");
+            debugclient.println("ERR Invalid format. Use: otp <reg>");
             return;
         }
 
@@ -108,26 +108,26 @@ void handleCommand(const String &cmd)
         uint32_t value = 0xBEEF;
 
         // Send bytes back
-        client.write((uint8_t *)&value, sizeof(value));
+        debugclient.write((uint8_t *)&value, sizeof(value));
     }
     else
     {
-        client.println("ERR Unknown command");
+        debugclient.println("ERR Unknown command");
     }
 }
 
 void ensureConnection(){
     if (!wifiConnected)
     {
-        connectToWiFi();
+        waitForWifi();
         if (!wifiConnected)
             return;
     }
 
-    if (!client.connected())
+    if (!debugclient.connected())
     {
         Serial.println("Disconnected. Reconnecting...");
-        while (!client.connect(host, port))
+        while (!debugclient.connect(host, port))
         {
             delay(500);
         }
@@ -176,7 +176,7 @@ void sendData(int numtags, TagInfo taginfos[])
 
     data += "}}\n";
 
-    if(USEWIFI) client.print(data);
+    if(USEWIFI) debugclient.print(data);
 
     // For debugging, print the JSON to serial
     // Serial.println("Sent JSON data:");
@@ -190,9 +190,9 @@ void debugserver_loop()
     if(USEWIFI){
         ensureConnection();    
     
-        if (client.available())
+        if (debugclient.available())
         {
-            String command = client.readStringUntil('\n');
+            String command = debugclient.readStringUntil('\n');
             command.trim();
     
             if (command.length() > 0)

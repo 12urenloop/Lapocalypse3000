@@ -4,6 +4,7 @@
 #include <ESPNowMeshClock.h>
 #include <Dw3000/src/dw3000.h>
 #include <connectivity/mqtt_reporter.hpp>
+#include <connectivity/debugserver.hpp>
 #include <types/taginfo.hpp>
 #include <boards.hpp>
 
@@ -46,8 +47,8 @@ static dwt_config_t config = {
 #define RNG_DELAY_MS 30
 
 /* Default antenna delay values for 64 MHz PRF. See NOTE 2 below. */
-#define TX_ANT_DLY 16350
-#define RX_ANT_DLY 16350
+#define TX_ANT_DLY 16415
+#define RX_ANT_DLY 16415
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
@@ -160,7 +161,7 @@ void setup()
     /* Next can enable TX/RX states output on GPIOs 5 and 6 to help debug, and also TX/RX LEDs
      * Note, in real low power applications the LEDs should not be used. */
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
-    unsigned int rx_timeout = 1000;
+    unsigned int rx_timeout = 10000;
     dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
     
 
@@ -184,8 +185,8 @@ unsigned short target_tag_ix = 0;
 
 void loop()
 {
-    // debugserver_loop();
     mqtt_loop();
+    debugserver_loop();
 
     // IMPORTANT: Call this regularly to handle broadcasts
     meshClock.loop();

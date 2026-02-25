@@ -17,41 +17,8 @@
 #define ANCHOR_ID 0
 #endif
 
-const int port = 7007; // Choose a port number
 WiFiClient client;
 PubSubClient mqttclient(client);
-bool wifiConnected = false;
-
-void connectToWiFi()
-{
-    Serial.println("Connecting to WiFi...");
-    WiFi.begin(ssid, password);
-
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20)
-    {
-        delay(500);
-        Serial.print(".");
-        attempts++;
-    }
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        wifiConnected = true;
-        Serial.println("\nWiFi connected");
-        Serial.print("IP address: ");
-        Serial.println(WiFi.localIP());
-    }
-    else
-    {
-        Serial.println("\nFailed to connect to WiFi");
-    }
-
-    mqttclient.setServer(host, 1883);
-}
-
-// timing recording variables
-unsigned long start, end = 0;
 
 void callback(char* topic, byte* message, unsigned int length) {}
 

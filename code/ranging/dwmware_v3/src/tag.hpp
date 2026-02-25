@@ -33,8 +33,8 @@ static dwt_config_t config = {
 };
 
 /* Default antenna delay values for 64 MHz PRF. See NOTE 2 below. */
-#define TX_ANT_DLY 16350
-#define RX_ANT_DLY 16350
+#define TX_ANT_DLY 16415
+#define RX_ANT_DLY 16415
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.

@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Dw3000/src/dw3000.h>
+#include "common.hpp"
 
 #define USEWIFI false
 #include <connectivity/debugserver.hpp>
@@ -15,26 +16,11 @@ const uint8_t PIN_RST = 14; // reset pin
 const uint8_t PIN_IRQ = 12; // irq pin
 const uint8_t PIN_SS = 5; // spi select pin
 
-/* Default communication configuration. We use default non-STS DW mode. */
-static dwt_config_t config = {
-        5,               /* Channel number. */
-        DWT_PLEN_1024,    /* Preamble length. Used in TX only. */
-        DWT_PAC8,        /* Preamble acquisition chunk size. Used in RX only. */
-        9,               /* TX preamble code. Used in TX only. */
-        9,               /* RX preamble code. Used in RX only. */
-        2,               /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-        DWT_BR_850K,      /* Data rate. */
-        DWT_PHRMODE_STD, /* PHY header mode. */
-        DWT_PHRRATE_STD, /* PHY header rate. */
-        (1025 + 16 - 8),   /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-        DWT_STS_MODE_OFF, /* STS disabled */
-        DWT_STS_LEN_64,/* STS length see allowed values in Enum dwt_sts_lengths_e */
-        DWT_PDOA_M0      /* PDOA mode off */
-};
+
 
 /* Default antenna delay values for 64 MHz PRF. See NOTE 2 below. */
-#define TX_ANT_DLY 16415
-#define RX_ANT_DLY 16415
+#define TX_ANT_DLY 16350
+#define RX_ANT_DLY 16350
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
@@ -123,6 +109,8 @@ void setup() {
     /* Next can enable TX/RX states output on GPIOs 5 and 6 to help debug, and also TX/RX LEDs
      * Note, in real low power applications the LEDs should not be used. */
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE); 
+
+    powerconfig();
 
     Serial.println("entering loop");
 }

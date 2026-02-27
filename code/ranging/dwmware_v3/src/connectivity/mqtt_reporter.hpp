@@ -45,27 +45,31 @@ void setup_wifi() {
 }
 
 void mqtt_setup() {
-  setup_wifi();
-  mqttclient.setServer(host, 1883);
-  mqttclient.setCallback(callback);
+  if(USEWIFI){
+    setup_wifi();
+    mqttclient.setServer(host, 1883);
+    mqttclient.setCallback(callback);
+  }
 }
 
 
 void sendData(TagInfo taginfo)
 {
-    // ensureConnection();
-
-    // Create JSON structure dynamically based on number of anchors
-    String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ",\"tag_id\":" + String(taginfo.tagID) + ",\"distance\":" + String(taginfo.distance * 100.0, 2) + "}";
-
-    if(USEWIFI) mqttclient.publish("uwb/anchormsg/test", data.c_str());
-    // if(USEWIFI) client.print(data);
-
-    // For debugging, print the JSON to serial
-    // Serial.println("Sent JSON data:");
-    Serial.print(millis());
-    Serial.print(": ");
-    Serial.println(data);
+    if(USEWIFI){
+      // ensureConnection();
+  
+      // Create JSON structure dynamically based on number of anchors
+      String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ",\"tag_id\":" + String(taginfo.tagID) + ",\"distance\":" + String(taginfo.distance * 100.0, 2) + "}";
+  
+      if(USEWIFI) mqttclient.publish("uwb/anchormsg/test", data.c_str());
+      // if(USEWIFI) client.print(data);
+  
+      // For debugging, print the JSON to serial
+      // Serial.println("Sent JSON data:");
+      Serial.print(millis());
+      Serial.print(": ");
+      Serial.println(data);
+    }
 }
 
 void reconnect() {
@@ -88,8 +92,10 @@ void reconnect() {
 }
 
 void mqtt_loop(){
-    if (!mqttclient.connected()) {
-        reconnect();
+    if(USEWIFI){
+      if (!mqttclient.connected()) {
+          reconnect();
+      }
+      mqttclient.loop();
     }
-    mqttclient.loop();
 }

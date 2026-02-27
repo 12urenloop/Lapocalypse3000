@@ -1,8 +1,9 @@
-#define USEWIFI true
+#define USEWIFI false
 
 #include <Arduino.h>
 #include <ESPNowMeshClock.h>
 #include <Dw3000/src/dw3000.h>
+#include "common.hpp"
 #include <connectivity/mqtt_reporter.hpp>
 #include <connectivity/debugserver.hpp>
 #include <types/taginfo.hpp>
@@ -25,23 +26,6 @@ const uint8_t PIN_SS = 5; // spi select pin
 #endif
 
 ESPNowMeshClock meshClock;
-
-/* Default communication configuration. We use default non-STS DW mode. */
-static dwt_config_t config = {
-    5,                /* Channel number. */
-    DWT_PLEN_1024,    /* Preamble length. Used in TX only. */
-    DWT_PAC8,         /* Preamble acquisition chunk size. Used in RX only. */
-    9,                /* TX preamble code. Used in TX only. */
-    9,                /* RX preamble code. Used in RX only. */
-    2,                /* 0 to use standard 8 symbol SFD, 1 to use non-standard 8 symbol, 2 for non-standard 16 symbol SFD and 3 for 4z 8 symbol SDF type */
-    DWT_BR_850K,      /* Data rate. */
-    DWT_PHRMODE_STD,  /* PHY header mode. */
-    DWT_PHRRATE_STD,  /* PHY header rate. */
-    (1025 + 16 - 8),  /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    DWT_STS_MODE_OFF, /* STS disabled */
-    DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
-    DWT_PDOA_M0       /* PDOA mode off */
-};
 
 /* Inter-ranging delay period, in milliseconds. */
 #define RNG_DELAY_MS 30
@@ -161,8 +145,14 @@ void setup()
     /* Next can enable TX/RX states output on GPIOs 5 and 6 to help debug, and also TX/RX LEDs
      * Note, in real low power applications the LEDs should not be used. */
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
-    unsigned int rx_timeout = 10000;
+    unsigned int rx_timeout = 7000;
     dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
+
+    powerconfig();
+
+    // only disable RX led (green)
+    dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b000 << 6) | (0b001 << 3) | (0b001 << 0));
+
     
 
     meshClock.begin();
@@ -182,6 +172,10 @@ const unsigned short ntags = 2; // CHANGE FOR MULTI TAG
 uint8_t tagIDs[ntags] = {0xA1, 0xA2};
 double distances[ntags] = {0.0, 0.0};
 unsigned short target_tag_ix = 0;
+
+bool workingReceive = false; // received a valid packet yet?
+
+uint64_t lastReceive = 0;
 
 void loop()
 {
@@ -245,26 +239,15 @@ void SSTWR_measuredistance(){
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
     dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. */
     dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);          /* Zero offset in TX buffer, ranging. */
-    delay(100);
     /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
      * set by dwt_setrxaftertxdelay() has elapsed. */
     dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
-    Serial.println("start send");
-    // UART_puts("SEND\r\n");
-    delay(10);
-    status_reg = dwt_read32bitreg(SYS_STATUS_ID);
-    Serial.println(status_reg, HEX);
-    Serial.println(dwt_read32bitreg(SYS_STATUS_HI_ID), HEX);
-    Serial.println(dwt_read32bitreg(FINT_STAT_ID), HEX);
 
     /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 8 below. */
     while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
     {
     };
     UART_puts("OK\r\n");
-    Serial.println(status_reg, HEX);
-    uint32_t rxfwto = dwt_read32bitreg(RX_FWTO_ID);
-    Serial.println(rxfwto, HEX);
 
     /* Increment frame sequence number after transmission of the poll message (modulo 256). */
     frame_seq_nb++;
@@ -307,6 +290,8 @@ void SSTWR_measuredistance(){
                 /* Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
                 clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
 
+                uint64_t rxms = millis();
+
                 /* Get timestamps embedded in response message. */
                 // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
                 // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
@@ -334,9 +319,17 @@ void SSTWR_measuredistance(){
 
                 /* Display computed distance on LCD. */
                 snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
+                Serial.print("RX delta: "); Serial.println(rxms - lastReceive);
+                lastReceive = rxms;
                 // UART_puts("DIST\r\n");
                 // Serial.println("dist");
                 test_run_info((unsigned char *)dist_str);
+
+                if(!workingReceive){
+                    workingReceive = true;
+                    // enable all leds
+                    dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b001 << 6) | (0b001 << 3) | (0b001 << 0));
+                }
             }else{
                 Serial.println("no match");
             }

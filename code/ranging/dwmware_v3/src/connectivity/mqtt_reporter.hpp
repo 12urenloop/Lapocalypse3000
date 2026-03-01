@@ -4,6 +4,8 @@
 #include <types/taginfo.hpp>
 #include <env/wificonfig.hpp>
 #include <PubSubClient.h>
+#include <uwb/UWB_common.hpp>
+
 
 #ifndef USEWIFI
 #define USEWIFI true
@@ -53,14 +55,24 @@ void mqtt_setup() {
 }
 
 
-void sendData(TagInfo taginfo)
+void sendData(byte* anchorIds, double* distances)
 {
     if(USEWIFI){
       // ensureConnection();
   
       // Create JSON structure dynamically based on number of anchors
-      String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ",\"tag_id\":" + String(taginfo.tagID) + ",\"distance\":" + String(taginfo.distance * 100.0, 2) + "}";
+      // String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ",\"tag_id\":" + String(taginfo.tagID) + ",\"distance\":" + String(taginfo.distance * 100.0, 2) + "}";
   
+      String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ", \"tags\":{";
+
+        for(int i = 0; i < N_TAGS; i++){
+          data += "\"" + String(anchorIds[i]) + "\":{";
+            data += "\"distance\":" + String(distances[i]);
+          data += "}";
+        }
+
+      data += "}";
+
       if(USEWIFI) mqttclient.publish("uwb/anchormsg/test", data.c_str());
       // if(USEWIFI) client.print(data);
   

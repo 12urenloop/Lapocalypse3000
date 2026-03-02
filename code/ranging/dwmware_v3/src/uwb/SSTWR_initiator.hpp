@@ -1,7 +1,8 @@
 #pragma once
 #include <uwb/UWB_common.hpp>
 #include <ESPNowMeshClock.h>
-
+#include <env/anchorconfig.hpp>
+#include <env/tagconfig.hpp>
 
 
 #define RESP_RX_TIMEOUT_UUS 400
@@ -17,7 +18,7 @@ class SSTWR_Initiator : UWB_Common
 public:
     uint32_t nextSlot;
 
-    byte tagIDs[N_TAGS];      // array of size ntags
+    byte tagIDs[N_TAGS] = TAG_IDS;      // array of size ntags
     double distances[N_TAGS]; // array of size ntags
     unsigned short target_tag_ix;
 
@@ -36,7 +37,6 @@ public:
 
     SSTWR_Initiator(UWB_Common::Config cconfig, Config config, uint32_t mySlot) : anchorConfig(config){
         UWB_Common::config = cconfig;
-        UWB_Common::setup();
         mySlotOffsetMS = mySlot * config.slotOffsetMS;
         target_tag_ix = 0;
         nextSlot = mySlotOffsetMS;
@@ -46,6 +46,9 @@ public:
         {
             distances[i] = -10.0;
         }
+
+        tx_poll_msg[0] = cconfig.address; // set sender
+        rx_resp_msg[1] = cconfig.address; // set expected receiver
     }
 
 

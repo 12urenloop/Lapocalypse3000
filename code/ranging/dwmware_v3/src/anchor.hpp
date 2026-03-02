@@ -2,14 +2,10 @@
 
 #include <Arduino.h>
 #include <ESPNowMeshClock.h>
-#include <Dw3000/src/dw3000.h>
-#include "common.hpp"
 #include <connectivity/mqtt_reporter.hpp>
 #include <connectivity/debugserver.hpp>
 #include <types/taginfo.hpp>
-#include <boards.hpp>
 #include <uwb/SSTWR_initiator.hpp>
-#include <uwb/UWB_common.hpp>
 
 #define APP_NAME "SS TWR INIT v1.0"
 
@@ -39,7 +35,6 @@ void setup()
     mqtt_setup();
 }
 
-void SSTWR_measuredistance();
 
 static SyncState lastState = SyncState::ALONE;
 

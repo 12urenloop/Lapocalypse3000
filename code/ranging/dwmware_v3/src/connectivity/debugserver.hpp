@@ -4,19 +4,11 @@
 #include <Dw3000/src/dw3000.h>
 #include <types/taginfo.hpp>
 #include <env/wificonfig.hpp>
+#include <env/anchorconfig.hpp>
 
 #ifndef USEWIFI
 #define USEWIFI true
 #endif
-
-#ifndef TAG_ID
-#define TAG_ID 1
-#endif
-
-#ifndef ANCHOR_ID
-#define ANCHOR_ID 0
-#endif
-
 
 const int port = 7007; // Choose a port number
 WiFiClient debugclient;

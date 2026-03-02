@@ -12,7 +12,7 @@
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
-static uint8_t rx_poll_msg[] = {0x01, 0xA0 + TAG_ID, 0xE0, 0, 0};
+// static uint8_t rx_poll_msg[] = {0x01, 0xA0 + TAG_ID, 0xE0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes.
 static uint8_t tx_resp_msg[] = {0xA0 + TAG_ID, 0x01, 0xE1, 0, 0, 0, 0, 0, 0};
 
@@ -30,7 +30,6 @@ public:
 
     SSTWR_Responder(UWB_Common::Config cconfig){
         UWB_Common::config = cconfig;
-        UWB_Common::setup();
     }
 
 
@@ -40,7 +39,7 @@ public:
     }
 
     void loop(){
-
+        SSTWR_respond();
     }
 
     void SSTWR_respond(){

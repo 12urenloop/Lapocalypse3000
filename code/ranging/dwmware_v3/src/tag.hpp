@@ -1,6 +1,4 @@
 #include <Arduino.h>
-#include <Dw3000/src/dw3000.h>
-#include "common.hpp"
 #include <uwb/SSTWR_responder.hpp>
 
 #define USEWIFI false
@@ -12,8 +10,13 @@ SSTWR_Responder uwb_responder = SSTWR_Responder({standard_dwconfig, 0xA0 + TAG_I
 
 void setup()
 {
-    UART_init();
-    test_run_info((unsigned char *)APP_NAME);
+    Serial.begin(115200);
+    Serial.println("LAPOCALYPSE3000 TAG");
+
+    Serial.print("TAG ID: ");
+    Serial.println(TAG_ID);
+    Serial.print("BOARD ID: ");
+    Serial.println(BOARD);
 
     uwb_responder.setup();
 

@@ -55,6 +55,17 @@ public:
     void setup()
     {
         UWB_Common::setup();
+        
+        /* Set expected response's delay and timeout. See NOTE 1 and 5 below.
+        * As this example only handles one incoming frame with always the same delay and timeout, those values can be set here once for all. */
+        dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
+        dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
+
+        unsigned int rx_timeout = 7000;
+        dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
+
+        // only disable RX led (green)
+        dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b000 << 6) | (0b001 << 3) | (0b001 << 0));
     }
 
     void slotted_loop(){
@@ -76,6 +87,14 @@ public:
         SSTWR_measuredistance();
         target_tag_ix++;
         target_tag_ix %= N_TAGS;
+
+        if(target_tag_ix == 0 && config.enable_serialreport){
+            Serial.print("= ");
+            for(int i = 0; i < N_TAGS; i++){
+                Serial.print(distances[i]); Serial.print(" ");
+            }
+            Serial.println("");
+        }
     }
 
     void SSTWR_measuredistance()
@@ -93,13 +112,12 @@ public:
         while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
         {
         };
-        UART_puts("OK\r\n");
 
         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
         frame_seq_nb++;
 
         // Serial.printf("stat: %#010x\n", status_reg); // print hex
-        snprintf(dist_str, sizeof(dist_str), "stat: %#010x\n", status_reg);
+        // snprintf(dist_str, sizeof(dist_str), "stat: %#010x\n", status_reg);
 
         if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
         {
@@ -165,9 +183,9 @@ public:
 
                     /* Display computed distance on LCD. */
                     snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
-                    Serial.print("RX delta: ");
-                    Serial.println(rxms - lastReceive);
-                    lastReceive = rxms;
+                    // Serial.print("RX delta: ");
+                    // Serial.println(rxms - lastReceive);
+                    // lastReceive = rxms;
                     // UART_puts("DIST\r\n");
                     // Serial.println("dist");
                     test_run_info((unsigned char *)dist_str);
@@ -179,19 +197,19 @@ public:
                         dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b001 << 6) | (0b001 << 3) | (0b001 << 0));
                     }
                 }
-                else
-                {
-                    Serial.println("no match");
-                }
+                // else
+                // {
+                //     Serial.println(">no match");
+                // }
             }
             else
             {
-                Serial.println("framelen not ok");
+                Serial.println(">framelen not ok");
             }
         }
         else
         {
-            Serial.println("RX error");
+            Serial.print(">RX error: ");
             Serial.println(status_reg, HEX);
             /* Clear RX error/timeout events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);

@@ -16,7 +16,7 @@ SSTWR_Initiator::Config anchorconfig = {
     };
 
 SSTWR_Initiator UWBInitiator = 
-    SSTWR_Initiator({standard_dwconfig, ANCHOR_ID}, anchorconfig, ANCHOR_ID - 1);
+    SSTWR_Initiator({standard_dwconfig, ANCHOR_ID, true}, anchorconfig, ANCHOR_ID - 1);
 
 
 void setup()

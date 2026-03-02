@@ -9,5 +9,5 @@
 - addressing ok
 - persistent anchor data
     - wifi is niet voldoende hmm
-    - PI saving?
+    - PI saving? getest maar nog niet set up op pis
     - 

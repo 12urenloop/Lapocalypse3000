@@ -36,6 +36,9 @@ public:
     void setup()
     {
         UWB_Common::setup();
+
+        // enable all leds
+        dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b001 << 6) | (0b001 << 3) | (0b001 << 0));
     }
 
     void loop(){
@@ -48,7 +51,8 @@ public:
 
         /* Poll for reception of a frame or error/timeout. See NOTE 6 below. */
         while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR)))
-        { };
+        { 
+        };
 
         if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
         {
@@ -122,7 +126,7 @@ public:
                         Serial.print(rx_buffer[i], HEX);
                         Serial.print(" ");
                     }
-                    Serial.print("comparing to "); Serial.println(0xA0 + TAG_ID, HEX);
+                    Serial.print("comparing to "); Serial.println(config.address, HEX);
                     Serial.println();
                 }
             }else{

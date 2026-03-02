@@ -28,8 +28,13 @@ const uint8_t PIN_SS = 4;   // spi select
 #define RNG_DELAY_MS 30
 
 /* Default antenna delay values for 64 MHz PRF. See NOTE 2 below. */
+#ifndef TX_ANT_DLY
 #define TX_ANT_DLY 16415
+#endif
+
+#ifndef RX_ANT_DLY
 #define RX_ANT_DLY 16415
+#endif
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 // #define ALL_MSG_COMMON_LEN 10
@@ -83,6 +88,7 @@ class UWB_Common{
     struct Config{
         dwt_config_t dwconfig;
         byte address;
+        bool enable_serialreport = false;
     };
 
     Config config = {standard_dwconfig, 0x0};
@@ -127,23 +133,15 @@ class UWB_Common{
         dwt_setrxantennadelay(RX_ANT_DLY);
         dwt_settxantennadelay(TX_ANT_DLY);
 
-        /* Set expected response's delay and timeout. See NOTE 1 and 5 below.
-        * As this example only handles one incoming frame with always the same delay and timeout, those values can be set here once for all. */
-        dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
-        dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
-
         /* Next can enable TX/RX states output on GPIOs 5 and 6 to help debug, and also TX/RX LEDs
         * Note, in real low power applications the LEDs should not be used. */
         dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
-        unsigned int rx_timeout = 7000;
-        dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
+        
 
         dwt_write32bitreg(TX_POWER_ID, 0xFFFFFFEF);
         dwt_setleds(0b11);
         dwt_write32bitreg(LED_CTRL_ID, 0x0101); // set shortest led blink time
 
-        // only disable RX led (green)
-        dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b000 << 6) | (0b001 << 3) | (0b001 << 0));
     }
 
 };

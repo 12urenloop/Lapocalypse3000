@@ -45,6 +45,32 @@ uint64_t lastReceive = 0;
 
 unsigned long lastreport = 0;
 
+void checkforMark() {
+  static String line = "";
+
+  while (Serial.available()) {
+    char c = Serial.read();
+
+    // End of line detected
+    if (c == '\n') {
+      line.trim();  // Remove whitespace and \r
+
+      if (line.startsWith("MARK ")) {
+        uint16_t markid;
+        uint32_t unixts;
+
+        // Parse using sscanf
+        if (sscanf(line.c_str(), "MARK %hu %lu", &markid, &unixts) == 2) {
+          UWBInitiator.sendMarker(markid, unixts);
+        }
+      }
+
+      line = "";  // Clear for next line
+    } else {
+      line += c;
+    }
+  }
+}
 
 void loop()
 {
@@ -77,6 +103,8 @@ void loop()
     }
 
     UWBInitiator.slotted_loop();
+
+    checkforMark();
 
     unsigned long ms = millis();
     if (ms - lastreport > 200)

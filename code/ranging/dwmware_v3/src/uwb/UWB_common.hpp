@@ -4,6 +4,8 @@
 #include <boards.hpp>
 
 #define N_TAGS 2
+#define BROADCAST 0xFF // broadcast address
+
 
 // connection pins
 

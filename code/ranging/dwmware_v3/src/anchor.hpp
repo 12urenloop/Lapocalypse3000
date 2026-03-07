@@ -12,7 +12,7 @@
 ESPNowMeshClock meshClock;
 
 SSTWR_Initiator::Config anchorconfig = {
-        50, 25, meshClock
+        50, 25, meshClock, true
     };
 
 SSTWR_Initiator UWBInitiator = 

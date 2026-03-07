@@ -4,7 +4,7 @@
 #include <boards.hpp>
 
 #define N_TAGS 2
-#define BROADCAST 0xFF // broadcast address
+#define ANCHORBROADCAST 0xFF // broadcast address
 
 
 // connection pins
@@ -13,9 +13,7 @@
 const uint8_t PIN_RST = 27; // reset pin
 const uint8_t PIN_IRQ = 14; // irq pin
 const uint8_t PIN_SS = 4;   // spi select 
-#endif
-
-#if BOARD==WEMOSUNO
+#elif BOARD==WEMOSUNO
 const uint8_t PIN_RST = 14; // reset pin
 const uint8_t PIN_IRQ = 12; // irq pin
 const uint8_t PIN_SS = 5; // spi select pin
@@ -144,6 +142,32 @@ class UWB_Common{
         dwt_setleds(0b11);
         dwt_write32bitreg(LED_CTRL_ID, 0x0101); // set shortest led blink time
 
+    }
+
+    void LEDBlinkBlocking(){
+        for (int i = 0; i < 200; i++)
+        {
+            dwt_write32bitreg(LED_CTRL_ID + 2, 0b1111);
+            delay(2);
+        }
+        delay(500);
+        for (int i = 0; i < 200; i++)
+        {
+            dwt_write32bitreg(LED_CTRL_ID + 2, 0b0000);
+            delay(2);
+        }
+        delay(500);
+        for (int i = 0; i < 200; i++)
+        {
+            dwt_write32bitreg(LED_CTRL_ID + 2, 0b1111);
+            delay(2);
+        }
+        delay(500);
+        for (int i = 0; i < 200; i++)
+        {
+            dwt_write32bitreg(LED_CTRL_ID + 2, 0b0000);
+            delay(2);
+        }
     }
 
 };

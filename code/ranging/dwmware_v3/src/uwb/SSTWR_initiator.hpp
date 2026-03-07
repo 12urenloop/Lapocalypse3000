@@ -9,7 +9,7 @@
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
 uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0};
-uint8_t tx_marker_msg[] = {0x0 + ANCHOR_ID, BROADCAST, 0xE5, 0, 0, 0, 0, 0, 0};
+uint8_t tx_marker_msg[] = {0x0 + ANCHOR_ID, ANCHORBROADCAST, 0xE5, 0, 0, 0, 0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes.
 uint8_t rx_resp_msg[] = {0xA1, 0x0 + ANCHOR_ID, 0xE1, 0, 0, 0, 0, 0, 0};
 
@@ -27,6 +27,7 @@ public:
         uint32_t slotIntervalMS = 50;
         uint32_t slotOffsetMS = 25;
         ESPNowMeshClock &meshClock;
+        bool enable_marks;
     };
     uint32_t mySlotOffsetMS;
 
@@ -34,6 +35,7 @@ public:
     uint32_t status_reg;
     uint32_t lastReceive;
     bool workingReceive;
+    uint32_t lastloop = millis();
 
     SSTWR_Initiator(UWB_Common::Config cconfig, Config config, uint32_t mySlot) : anchorConfig(config)
     {
@@ -70,13 +72,14 @@ public:
     }
 
     void waitForSlot(){
-        // wait for next slot
         uint32_t meshMs = anchorConfig.meshClock.meshMillis();
-        nextSlot = meshMs - (meshMs % anchorConfig.slotIntervalMS) + anchorConfig.slotIntervalMS + mySlotOffsetMS; // Schedule next pulse
         long TimeToSlotMS = (long)nextSlot - (long)meshMs;
+        // Serial.print(TimeToSlotMS); Serial.println("ms to next slot; waiting...");
         while (TimeToSlotMS < 0)
         {
-            TimeToSlotMS += anchorConfig.slotIntervalMS;
+            Serial.print("missed slot by "); Serial.print(-TimeToSlotMS); Serial.println("ms; looking for next slot...");
+            scheduleSlot();
+            TimeToSlotMS = (long)nextSlot - (long)meshMs;
         }
 
         // long offset = (long)meshMs - (long)nextSlot;
@@ -84,95 +87,108 @@ public:
             delayMicroseconds(TimeToSlotMS * 1000);
     }
 
+    long timeLeftMS(){
+        uint32_t meshMs = anchorConfig.meshClock.meshMillis();
+        long TimeToSlotMS = (long)nextSlot - (long)meshMs;
+        return TimeToSlotMS;
+    }
+
     void lookforMark(){
-        unsigned int rx_timeout = 700000;
-        dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
-        dwt_rxenable(DWT_START_RX_IMMEDIATE);
-
-        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
-        {
-            uint32_t meshMs = anchorConfig.meshClock.meshMillis();
-            nextSlot = meshMs - (meshMs % anchorConfig.slotIntervalMS) + anchorConfig.slotIntervalMS + mySlotOffsetMS; // Schedule next pulse
-            long TimeToSlotMS = (long)nextSlot - (long)meshMs;
-            while (TimeToSlotMS < 0)
+        // look for matching packets until a mark is received or the slot time is almost up
+        while(true){
+            // uint32_t start = millis();
+            // Serial.print(timeLeftMS()); Serial.println("ms to next slot; looking for mark...");
+            while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
             {
-                TimeToSlotMS += anchorConfig.slotIntervalMS;
-            }
-            if(TimeToSlotMS < 5){
-                Serial.println("***");
-                return;
-            }
-        };
-
-        if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
-        {
-            // UART_puts("RX\r\n");
-
-            uint32_t frame_len;
-
-            /* Clear good RX frame event in the DW IC status register. */
-            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
-            // UART_puts("RECV\r\n");
-
-            /* A frame has been received, read it into the local buffer. */
-            frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
-            if (frame_len <= sizeof(rx_buffer))
-            {
-                // UART_puts("READ\r\n");
-
-                dwt_readrxdata(rx_buffer, frame_len, 0);
-
-                /* Check that the frame is the expected response from the companion "SS TWR responder" example.
-                 * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                rx_buffer[ALL_MSG_SN_IDX] = 0;
-
-                if (rx_buffer[1] == BROADCAST && rx_buffer[2] == 0xE5)
-                {
-                    // time marker
-
-                    uint32_t unixts = 0;
-                    resp_msg_get_ts(&rx_buffer[3], &unixts);
-                    uint16_t markid = rx_buffer[3 + 5] << 8 + rx_buffer[3 + 4];
-
-                    Serial.print("#RXMARK ");
-                    Serial.print(markid);
-                    Serial.print(" unix ");
-                    Serial.print(unixts);
-                    Serial.print(" millis ");
-                    Serial.println(millis());
-
-                    for (int i = 0; i < 200; i++)
-                    {
-                        dwt_write32bitreg(LED_CTRL_ID + 2, 0b1111);
-                        delay(2);
-                    }
-                    delay(500);
-                    for (int i = 0; i < 200; i++)
-                    {
-                        dwt_write32bitreg(LED_CTRL_ID + 2, 0b1111);
-                        delay(2);
-                    }
-                    delay(500);
-                    for (int i = 0; i < 200; i++)
-                    {
-                        dwt_write32bitreg(LED_CTRL_ID + 2, 0b1111);
-                        delay(2);
-                    }
-                    delay(500);
+                if(timeLeftMS() < 10L){
+                    uint32_t end = millis();
+                    // Serial.print("waited "); Serial.print(end - start); Serial.println("ms");
+                    // Serial.println("exit mark wait");
+                    dwt_forcetrxoff();
+                    return;
                 }
+            };
+    
+            // uint32_t end = millis();
+            // Serial.print("waited "); Serial.print(end - start); Serial.println("ms");
+    
+            if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
+            {
+                // UART_puts("RX\r\n");
+    
+                uint32_t frame_len;
+    
+                /* Clear good RX frame event in the DW IC status register. */
+                dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+                
+                // UART_puts("RECV\r\n");
+    
+                /* A frame has been received, read it into the local buffer. */
+                frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
+                if (frame_len <= sizeof(rx_buffer))
+                {
+                    // UART_puts("READ\r\n");
+    
+                    dwt_readrxdata(rx_buffer, frame_len, 0);
+    
+                    /* Check that the frame is the expected response from the companion "SS TWR responder" example.
+                     * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
+    
+                    if (rx_buffer[1] == ANCHORBROADCAST && rx_buffer[2] == 0xE5)
+                    {
+                        // time marker
+    
+                        uint32_t unixts = 0;
+                        resp_msg_get_ts(&rx_buffer[3], &unixts);
+                        uint16_t markid = rx_buffer[3 + 5] << 8 + rx_buffer[3 + 4];
+    
+                        Serial.print("#RXMARK ");
+                        Serial.print(markid);
+                        Serial.print(" unix ");
+                        Serial.print(unixts);
+                        Serial.print(" millis ");
+                        Serial.println(millis());
+    
+                        LEDBlinkBlocking();
+                        scheduleSlot();
+                        return;
+                    }else{
+                        // Serial.println(">MARK no match");
+                    }
+                }else{
+                    Serial.println(">MARK framelen not ok");
+                }
+            }else{
+                // Serial.print(">RX error: ");
+                // Serial.println(status_reg, HEX);
+                // Serial.println("VVV");
             }
+            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
+    }
+
+    void scheduleSlot(){
+        uint32_t ms = millis();
+        uint32_t looptime = ms - lastloop;
+        Serial.print("loop time: "); Serial.print(looptime); Serial.println("ms");
+        lastloop = ms;
+        // wait for next slot
+        uint32_t meshMs = anchorConfig.meshClock.meshMillis();
+        nextSlot = meshMs - (meshMs % anchorConfig.slotIntervalMS) + anchorConfig.slotIntervalMS + mySlotOffsetMS; // Schedule next pulse
     }
 
     void slotted_loop()
     {
-        lookforMark();
-
+        scheduleSlot();
+        if(anchorConfig.enable_marks){
+            lookforMark();
+        }
         tx_poll_msg[1] = tagIDs[target_tag_ix]; // set receiver
         rx_resp_msg[0] = tagIDs[target_tag_ix]; // expect message from receiver
         SSTWR_measuredistance();
         target_tag_ix++;
         target_tag_ix %= N_TAGS;
+
 
         // if(target_tag_ix == 0 && config.enable_serialreport){
         //     Serial.print("= ");
@@ -183,8 +199,18 @@ public:
         // }
     }
 
+    void startMarkRX(){
+        if(anchorConfig.enable_marks){
+            
+            unsigned int rx_timeout = 700000;
+            dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
+            dwt_rxenable(DWT_START_RX_IMMEDIATE);
+        }
+    }
+
     void SSTWR_measuredistance()
     {
+        bool success = false;
         unsigned int rx_timeout = 7000;
         dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
         /* Write frame data to DW IC and prepare transmission. See NOTE 7 below. */
@@ -243,6 +269,9 @@ public:
                     /* Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
                     clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
 
+                    // RX done, turn receiver on again if marks are enabled
+                    startMarkRX();
+
                     uint64_t rxms = millis();
 
                     /* Get timestamps embedded in response message. */
@@ -276,39 +305,7 @@ public:
                         // enable all leds
                         dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b001 << 6) | (0b001 << 3) | (0b001 << 0));
                     }
-                } else if (rx_buffer[1] == BROADCAST && rx_buffer[2] == 0xE5)
-                {
-                    // time marker
-
-                    uint32_t unixts = 0;
-                    resp_msg_get_ts(&rx_buffer[3], &unixts);
-                    uint16_t markid = rx_buffer[3 + 5] + rx_buffer[3 + 4] << 8;
-
-                    Serial.print("#RXMARK ");
-                    Serial.print(markid);
-                    Serial.print(" unix ");
-                    Serial.print(unixts);
-                    Serial.print(" millis ");
-                    Serial.println(millis());
-
-                    for (int i = 0; i < 200; i++)
-                    {
-                        dwt_write32bitreg(LED_CTRL_ID + 2, 0b1111);
-                        delay(2);
-                    }
-                    delay(500);
-                    for (int i = 0; i < 200; i++)
-                    {
-                        dwt_write32bitreg(LED_CTRL_ID + 2, 0b1111);
-                        delay(2);
-                    }
-                    delay(500);
-                    for (int i = 0; i < 200; i++)
-                    {
-                        dwt_write32bitreg(LED_CTRL_ID + 2, 0b1111);
-                        delay(2);
-                    }
-                    delay(500);
+                    success = true;
                 }
                 else
                 {
@@ -329,10 +326,13 @@ public:
             /* Clear RX error/timeout events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
+
+        if(!success) startMarkRX();
     }
 
     void sendMarker(uint16_t markerid, uint32_t unixtime)
     {
+        scheduleSlot();
         tx_marker_msg[3 + 5] = markerid & 0xFF;
         tx_marker_msg[3 + 4] = (markerid & 0xFF00) >> 8;
 
@@ -348,7 +348,6 @@ public:
         dwt_writetxfctrl(sizeof(tx_marker_msg), 0, 1);          /* Zero offset in TX buffer, ranging. */
                                                               /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
                                                                * set by dwt_setrxaftertxdelay() has elapsed. */
-        
         waitForSlot();
         dwt_starttx(DWT_START_TX_IMMEDIATE);
         Serial.print("@TXMARK ");
@@ -357,8 +356,10 @@ public:
         Serial.print(unixtime);
         Serial.print(" millis ");
         Serial.println(millis());
-        delay(200);
+        delay(5000);
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
-
+        dwt_forcetrxoff();
+        Serial.println("TXMARK done");
+        scheduleSlot();
     }
 };

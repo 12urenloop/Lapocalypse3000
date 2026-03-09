@@ -6,6 +6,10 @@
 
 #define RESP_RX_TIMEOUT_UUS 400
 
+#ifndef UWB_DEBUG
+#define UWB_DEBUG true
+#endif
+
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
 uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0};
@@ -24,8 +28,8 @@ public:
 
     struct Config
     {
-        uint32_t slotIntervalMS = 50;
-        uint32_t slotOffsetMS = 25;
+        uint32_t slotIntervalMS;
+        uint32_t slotOffsetMS;
         ESPNowMeshClock &meshClock;
         bool enable_marks;
     };
@@ -96,12 +100,12 @@ public:
     void lookforMark(){
         // look for matching packets until a mark is received or the slot time is almost up
         while(true){
-            // uint32_t start = millis();
+            uint32_t start = millis();
             // Serial.print(timeLeftMS()); Serial.println("ms to next slot; looking for mark...");
             while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
             {
-                if(timeLeftMS() < 10L){
-                    uint32_t end = millis();
+                if(timeLeftMS() < 2L){
+                    // uint32_t end = millis();
                     // Serial.print("waited "); Serial.print(end - start); Serial.println("ms");
                     // Serial.println("exit mark wait");
                     dwt_forcetrxoff();
@@ -139,9 +143,14 @@ public:
                         // time marker
     
                         uint32_t unixts = 0;
+                        uint16_t markid = ((uint16_t)rx_buffer[3 + 4] << 8) + (uint16_t)rx_buffer[3 + 5];
+
+                        Serial.print("framelen: "); Serial.println(frame_len);
+                        Serial.print("markid1: "); Serial.println(rx_buffer[3 + 4]);
+                        Serial.print("markid2: "); Serial.println(rx_buffer[3 + 5]);
+                        
                         resp_msg_get_ts(&rx_buffer[3], &unixts);
-                        uint16_t markid = rx_buffer[3 + 5] << 8 + rx_buffer[3 + 4];
-    
+                        
                         Serial.print("#RXMARK ");
                         Serial.print(markid);
                         Serial.print(" unix ");
@@ -156,7 +165,7 @@ public:
                         // Serial.println(">MARK no match");
                     }
                 }else{
-                    Serial.println(">MARK framelen not ok");
+                    if(UWB_DEBUG) Serial.println(">MARK framelen not ok");
                 }
             }else{
                 // Serial.print(">RX error: ");
@@ -170,7 +179,7 @@ public:
     void scheduleSlot(){
         uint32_t ms = millis();
         uint32_t looptime = ms - lastloop;
-        Serial.print("loop time: "); Serial.print(looptime); Serial.println("ms");
+        if(UWB_DEBUG) {Serial.print("loop time: "); Serial.print(looptime); Serial.println("ms");}
         lastloop = ms;
         // wait for next slot
         uint32_t meshMs = anchorConfig.meshClock.meshMillis();
@@ -292,10 +301,15 @@ public:
                     distance = tof * SPEED_OF_LIGHT;
                     distances[target_tag_ix] = distance;
 
-                    Serial.print("= ");
-                    Serial.print(target_tag_ix);
-                    Serial.print(" ");
-                    Serial.println(distance);
+                    if(UWB_DEBUG) {
+                        Serial.print("= ");
+                        Serial.print(target_tag_ix);
+                        Serial.print(" ");
+                        Serial.print(distance);
+                        Serial.print(" ");
+                        Serial.println(millis());
+                    }
+
 
                     test_run_info((unsigned char *)dist_str);
 
@@ -309,20 +323,22 @@ public:
                 }
                 else
                 {
-                    Serial.println(">no match");
+                    if(UWB_DEBUG) Serial.println(">no match");
                     //Serial.println(rx_buffer[1], HEX);
                     //Serial.println(rx_buffer[2], HEX);
                 }
             }
             else
             {
-                Serial.println(">framelen not ok");
+                if(UWB_DEBUG) Serial.println(">framelen not ok");
             }
         }
         else
         {
-            Serial.print(">RX error: ");
-            Serial.println(status_reg, HEX);
+            if(UWB_DEBUG) {
+                Serial.print(">RX error: ");
+                Serial.println(status_reg, HEX);
+            }
             /* Clear RX error/timeout events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
@@ -330,17 +346,17 @@ public:
         if(!success) startMarkRX();
     }
 
-    void sendMarker(uint16_t markerid, uint32_t unixtime)
+    void sendMarker(uint8_t markerid, uint32_t unixtime)
     {
         scheduleSlot();
-        tx_marker_msg[3 + 5] = markerid & 0xFF;
-        tx_marker_msg[3 + 4] = (markerid & 0xFF00) >> 8;
-
+        
         tx_marker_msg[3 + 3] = (unixtime >> 24) & 0xFF;
         tx_marker_msg[3 + 2] = (unixtime >> 16) & 0xFF;
         tx_marker_msg[3 + 1] = (unixtime >> 8) & 0xFF;
         tx_marker_msg[3 + 0] = (unixtime >> 0) & 0xFF;
-
+        
+        tx_marker_msg[3 + 5] = markerid;
+        tx_marker_msg[3 + 4] = markerid;
         /* Write frame data to DW IC and prepare transmission. See NOTE 7 below. */
         // tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
@@ -348,15 +364,26 @@ public:
         dwt_writetxfctrl(sizeof(tx_marker_msg), 0, 1);          /* Zero offset in TX buffer, ranging. */
                                                               /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
                                                                * set by dwt_setrxaftertxdelay() has elapsed. */
-        waitForSlot();
-        dwt_starttx(DWT_START_TX_IMMEDIATE);
         Serial.print("@TXMARK ");
         Serial.print(markerid);
         Serial.print(" unix ");
         Serial.print(unixtime);
         Serial.print(" millis ");
+        Serial.print(millis());
+
+        waitForSlot();
+
+        for(int i = 0; i < 50; i++){
+            dwt_starttx(DWT_START_TX_IMMEDIATE);
+            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+            dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+            delay(4);
+        }
+
+        Serial.print(" end ");
         Serial.println(millis());
-        delay(5000);
+
+        delay(1000);
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         dwt_forcetrxoff();
         Serial.println("TXMARK done");

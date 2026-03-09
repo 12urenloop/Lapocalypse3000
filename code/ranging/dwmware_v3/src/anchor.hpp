@@ -1,4 +1,5 @@
 #define USEWIFI false
+#define UWB_DEBUG true
 
 #include <Arduino.h>
 #include <ESPNowMeshClock.h>
@@ -12,7 +13,7 @@
 ESPNowMeshClock meshClock;
 
 SSTWR_Initiator::Config anchorconfig = {
-        50, 25, meshClock, true
+        50, 16, meshClock, true
     };
 
 SSTWR_Initiator UWBInitiator = 
@@ -56,12 +57,12 @@ void checkforMark() {
       line.trim();  // Remove whitespace and \r
 
       if (line.startsWith("MARK ")) {
-        uint16_t markid;
+        uint32_t markid;
         uint32_t unixts;
 
         // Parse using sscanf
-        if (sscanf(line.c_str(), "MARK %hu %lu", &markid, &unixts) == 2) {
-          UWBInitiator.sendMarker(markid, unixts);
+        if (sscanf(line.c_str(), "MARK %lu %lu", &markid, &unixts) == 2) {
+          UWBInitiator.sendMarker((uint8_t)markid, unixts);
         }
       }
 

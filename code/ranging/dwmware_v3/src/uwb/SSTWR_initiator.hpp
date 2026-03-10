@@ -13,6 +13,8 @@
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
 uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0};
+
+//layout: sender, receiver, marker id, timestamp 4 bytes, unused 2 bytes.
 uint8_t tx_marker_msg[] = {0x0 + ANCHOR_ID, ANCHORBROADCAST, 0xE5, 0, 0, 0, 0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes.
 uint8_t rx_resp_msg[] = {0xA1, 0x0 + ANCHOR_ID, 0xE1, 0, 0, 0, 0, 0, 0};
@@ -138,17 +140,17 @@ public:
                     /* Check that the frame is the expected response from the companion "SS TWR responder" example.
                      * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
     
-                    if (rx_buffer[1] == ANCHORBROADCAST && rx_buffer[2] == 0xE5)
+                    if (rx_buffer[1] == ANCHORBROADCAST /*&& rx_buffer[2] == 0xE5*/)
                     {
                         // time marker
     
                         uint32_t unixts = 0;
-                        uint16_t markid = ((uint16_t)rx_buffer[3 + 4] << 8) + (uint16_t)rx_buffer[3 + 5];
+                        uint8_t markid = rx_buffer[2];
 
                         Serial.print("framelen: "); Serial.println(frame_len);
                         Serial.print("markid1: "); Serial.println(rx_buffer[3 + 4]);
                         Serial.print("markid2: "); Serial.println(rx_buffer[3 + 5]);
-                        
+
                         resp_msg_get_ts(&rx_buffer[3], &unixts);
                         
                         Serial.print("#RXMARK ");
@@ -349,6 +351,7 @@ public:
     void sendMarker(uint8_t markerid, uint32_t unixtime)
     {
         scheduleSlot();
+
         
         tx_marker_msg[3 + 3] = (unixtime >> 24) & 0xFF;
         tx_marker_msg[3 + 2] = (unixtime >> 16) & 0xFF;
@@ -357,6 +360,7 @@ public:
         
         tx_marker_msg[3 + 5] = markerid;
         tx_marker_msg[3 + 4] = markerid;
+        tx_marker_msg[2] = markerid; // time saving hack, TODO fix
         /* Write frame data to DW IC and prepare transmission. See NOTE 7 below. */
         // tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);

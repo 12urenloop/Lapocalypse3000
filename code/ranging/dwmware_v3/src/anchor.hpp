@@ -23,6 +23,8 @@ SSTWR_Initiator UWBInitiator =
 void setup()
 {
     Serial.begin(115200);
+    Serial.println("STARTUP");
+    delay(4000);
     Serial.println("LAPOCALYPSE3000 ANCHOR");
 
     Serial.print("ANCHOR ID: ");
@@ -87,18 +89,30 @@ void loop()
     if (currentState != lastState)
     {
         lastState = currentState;
+        uint32_t rxled;
+        if(UWBInitiator.workingReceive){
+            rxled = 0b001;
+        }else{
+            rxled = 0b000;
+        }
 
         Serial.print(">>> State Change: ");
         switch (currentState)
         {
         case SyncState::ALONE:
             Serial.println("ALONE - Waiting for first sync message...");
+            // disable TX led (RED)
+            dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b000 << 9) | (rxled << 6) | (0b001 << 3) | (0b001 << 0));
             break;
         case SyncState::SYNCED:
             Serial.println("SYNCED - Successfully synchronized with mesh!");
+            // enable TX led (RED)
+            dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (rxled << 6) | (0b001 << 3) | (0b001 << 0));
             break;
         case SyncState::LOST:
             Serial.println("LOST - No sync messages received recently!");
+            // disable TX led (RED)
+            dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b000 << 9) | (rxled << 6) | (0b001 << 3) | (0b001 << 0));
             break;
         }
     }

@@ -18,7 +18,7 @@ cat > "$INSTALL_PATH" << 'EOF'
 #!/usr/bin/env bash
 
 BAUD=115200
-LOGDIR="/var/log/ttyusb-logger"
+LOGDIR="/srv/ttyusb-logger"
 declare -A RUNNING_PIDS
 
 mkdir -p "$LOGDIR"

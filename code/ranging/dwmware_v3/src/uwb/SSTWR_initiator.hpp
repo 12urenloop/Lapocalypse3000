@@ -308,6 +308,8 @@ public:
                         Serial.print(target_tag_ix);
                         Serial.print(" ");
                         Serial.print(distance);
+                        Serial.print(" mesh ");
+                        Serial.print(anchorConfig.meshClock.meshMillis());
                         Serial.print(" ");
                         Serial.println(millis());
                     }
@@ -372,6 +374,8 @@ public:
         Serial.print(markerid);
         Serial.print(" unix ");
         Serial.print(unixtime);
+        Serial.print(" mesh ");
+        Serial.print(anchorConfig.meshClock.meshMillis());
         Serial.print(" millis ");
         Serial.print(millis());
 

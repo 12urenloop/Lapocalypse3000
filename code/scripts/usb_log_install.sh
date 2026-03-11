@@ -8,7 +8,7 @@ fi
 
 INSTALL_PATH="/usr/local/bin/ttyusb-logger.sh"
 SERVICE_PATH="/etc/systemd/system/ttyusb-logger.service"
-LOGDIR="/var/log/ttyusb-logger"
+LOGDIR="/srv/ttyusb-logger"
 BAUD=115200
 
 echo "Installing ttyUSB logger..."

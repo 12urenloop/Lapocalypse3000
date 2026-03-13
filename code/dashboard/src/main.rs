@@ -1,4 +1,5 @@
 mod mqtt_distance_provider;
+mod log_distance_provider;
 mod triangulation;
 
 use bevy::prelude::*;
@@ -67,6 +68,7 @@ fn main() {
         .add_plugins(DashboardPlugin)
         .add_plugins(TriangulationPlugin)
         .add_plugins(MqttDistanceProviderPlugin)
+        .add_plugins(log_distance_provider::LogDistanceProviderPlugin)
         .insert_resource(MqttReceiver { messages })
         .add_systems(Startup, (describe_metrics, create_dashboard))
         .add_systems(Update, (update_metrics, process_mqtt_messages))

@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{platform::collections::HashMap, prelude::*};
 use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
@@ -125,21 +125,40 @@ fn forward_mqtt_to_events(
     receiver: Option<Res<MqttDistanceReceiver>>,
     provider: Res<ActiveDistanceProvider>,
     mut events: EventWriter<DistanceMeasurement>,
+    mut tracker: Local<HashMap<(usize, usize), f64>>,
+    time: Res<Time>,
 ) {
-    // Only forward when MQTT is the active provider.
     if provider.kind != DistanceProviderKind::Mqtt {
+        tracker.clear();
         return;
     }
 
-    let Some(receiver) = receiver else { return };
+    let now = time.elapsed_secs_f64();
 
-    if let Ok(mut buf) = receiver.payloads.lock() {
-        for payload in buf.drain(..) {
-            events.write(DistanceMeasurement {
-                anchor_id: payload.anchor_id,
-                tag_id: payload.tag_id,
-                distance: payload.distance / 100.0,
-            });
+    if let Some(receiver) = receiver {
+        if let Ok(mut buf) = receiver.payloads.lock() {
+            for payload in buf.drain(..) {
+                let key = (payload.anchor_id, payload.tag_id);
+                tracker.insert(key, now);
+                events.write(DistanceMeasurement {
+                    anchor_id: payload.anchor_id,
+                    tag_id: payload.tag_id,
+                    distance: Some(payload.distance / 100.0),
+                });
+            }
         }
     }
+
+    tracker.retain(|&(anchor_id, tag_id), last_seen| {
+        if now - *last_seen > 2.0 {
+            events.write(DistanceMeasurement {
+                anchor_id,
+                tag_id,
+                distance: None,
+            });
+            false
+        } else {
+            true
+        }
+    });
 }

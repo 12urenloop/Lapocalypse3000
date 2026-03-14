@@ -334,14 +334,22 @@ public:
             }
             else
             {
-                if(UWB_DEBUG) Serial.println(">framelen not ok");
+                if(UWB_DEBUG) Serial.println(">FLNOK");
+                Serial.print(" ");
+                Serial.print(target_tag_ix);
+                Serial.print(" ");
+                Serial.println(anchorConfig.meshClock.meshMillis());
             }
         }
         else
         {
             if(UWB_DEBUG) {
                 Serial.print(">RX error: ");
-                Serial.println(status_reg, HEX);
+                Serial.print(status_reg, HEX);
+                Serial.print(" ");
+                Serial.print(target_tag_ix);
+                Serial.print(" ");
+                Serial.println(anchorConfig.meshClock.meshMillis());
             }
             /* Clear RX error/timeout events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);

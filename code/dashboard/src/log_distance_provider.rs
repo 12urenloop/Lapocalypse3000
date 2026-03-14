@@ -1,6 +1,6 @@
+use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind};
 use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -23,8 +23,10 @@ pub struct LogPlaybackState {
     pub is_playing: bool,
     pub current_time_ms: u64,
     pub measurements: Vec<LogMeasurement>,
+    pub measurement_index: usize, // last index in measurements that is before current_time_ms
     pub max_time_ms: u64,
     pub last_frame_time: Option<Duration>,
+    pub last_contact: HashMap<(usize, usize), u64>, // (anchorid, tagid) -> last event timestamp
 }
 
 impl Default for LogPlaybackState {
@@ -34,8 +36,10 @@ impl Default for LogPlaybackState {
             is_playing: false,
             current_time_ms: 0,
             measurements: Vec::new(),
+            measurement_index: 0,
             max_time_ms: 0,
             last_frame_time: None,
+            last_contact: HashMap::new(),
         }
     }
 }
@@ -85,24 +89,41 @@ fn log_playback_system(
     }
 
     let mut current_state = HashMap::new();
-    for m in &state.measurements {
+    for (i, m) in (&state.measurements)
+        .iter()
+        .skip(state.measurement_index)
+        .enumerate()
+    {
         if m.timestamp_ms <= state.current_time_ms {
             let age = state.current_time_ms.saturating_sub(m.timestamp_ms);
-            let val = if age <= 2000 {
+            let val = if age <= 700 {
                 Some((m.timestamp_ms, m.distance))
             } else {
                 None
             };
             current_state.insert((m.anchor_id, m.tag_id), val);
+        } else {
+            state.measurement_index = i - 1;
+            break; // sorted so no problem, right?
+        }
+    }
+
+    for ((anchorid, tagid), lastms) in &state.last_contact {
+        let age = state.current_time_ms.saturating_sub(*lastms);
+        if age >= 700 {
+            current_state.insert((*anchorid, *tagid), None); // out of range
         }
     }
 
     for (key, val) in current_state {
+        let (anchorid, tagid) = key;
+        let cms = state.current_time_ms;
+        state.last_contact.insert(key, cms);
         if previous_state.get(&key) != Some(&val) {
             previous_state.insert(key, val);
             events.write(DistanceMeasurement {
-                anchor_id: key.0,
-                tag_id: key.1,
+                anchor_id: anchorid,
+                tag_id: tagid,
                 distance: val.map(|(_, d)| d),
             });
         }
@@ -132,6 +153,7 @@ fn log_playback_ui(
                 state.measurements = measurements;
                 state.max_time_ms = max_time;
                 state.current_time_ms = 0;
+                state.measurement_index = 0;
                 state.is_playing = false;
                 state.last_frame_time = None;
             }
@@ -147,7 +169,10 @@ fn log_playback_ui(
         ui.label(format!("Loaded {} measurements.", state.measurements.len()));
 
         ui.horizontal(|ui| {
-            if ui.button(if state.is_playing { "Pause" } else { "Play" }).clicked() {
+            if ui
+                .button(if state.is_playing { "Pause" } else { "Play" })
+                .clicked()
+            {
                 state.is_playing = !state.is_playing;
                 if state.is_playing {
                     // Reset the frame time so that we don't jump on resume
@@ -157,14 +182,16 @@ fn log_playback_ui(
 
             if ui.button("Restart").clicked() {
                 state.current_time_ms = 0;
+                state.measurement_index = 0;
             }
         });
 
         let mut time_f64 = state.current_time_ms as f64;
-        let slider = egui::Slider::new(&mut time_f64, 0.0..=state.max_time_ms as f64)
-            .text("ms");
+        ui.spacing_mut().slider_width = 700.0;
+        let slider = egui::Slider::new(&mut time_f64, 0.0..=state.max_time_ms as f64).text("ms");
         if ui.add(slider).changed() {
             state.current_time_ms = time_f64 as u64;
+            state.measurement_index = 0;
         }
     });
 }

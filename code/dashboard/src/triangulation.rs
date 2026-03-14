@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
@@ -50,7 +52,7 @@ pub struct ActiveDistanceProvider {
 impl Default for ActiveDistanceProvider {
     fn default() -> Self {
         Self {
-            kind: DistanceProviderKind::Mqtt,
+            kind: DistanceProviderKind::LogFiles,
             // Manual is always available; other providers register themselves.
             available: vec![DistanceProviderKind::Manual],
         }
@@ -70,6 +72,7 @@ impl Plugin for TriangulationPlugin {
         app.init_resource::<TriangulationState>()
             .init_resource::<ActiveDistanceProvider>()
             .add_event::<DistanceMeasurement>()
+            .add_systems(Startup, setup)
             .add_systems(
                 Update,
                 (consume_distance_events, draw_triangulation).chain(),
@@ -87,6 +90,7 @@ pub struct TagState {
     pub solutions: Option<(Vec2, Vec2)>,
     pub estimated_position: Option<Vec2>,
     pub show_radii: bool,
+    pub use_second_solution: bool,
 }
 
 /// Holds anchor positions, measured distances, and the computed result.
@@ -96,21 +100,30 @@ pub struct TriangulationState {
     pub tagstates: HashMap<usize, TagState>,
     /// The two candidate solutions (if they exist for 2 anchors).
     /// Which solution to display: false = first, true = second.
-    pub use_second_solution: bool,
     /// Visual scale: pixels per unit distance.
     pub scale: f32,
+    pub bgscale: f32,
+    pub useSecondSet: HashSet<(usize, usize)>, // (anchorid1, anchorid2) -> use second solution when these 2 anchors are available
 }
 
 impl Default for TriangulationState {
     fn default() -> Self {
         let mut anchors = HashMap::new();
-        anchors.insert(1, Vec2::new(-1.0, 0.0));
-        anchors.insert(2, Vec2::new(1.0, 0.0));
+        anchors.insert(1, Vec2::new(0.0, -0.5));
+        anchors.insert(2, Vec2::new(32.8, 0.0));
+        anchors.insert(3, Vec2::new(39.7, 12.7));
+
+        let mut use_second_set = HashSet::new();
+        use_second_set.insert((1, 2));
+        // use_second_map.insert((2, 3));
+        use_second_set.insert((1, 3));
+
         Self {
             anchors,
             tagstates: HashMap::new(),
-            use_second_solution: false,
-            scale: 150.0,
+            scale: 10.0,
+            bgscale: 0.05,
+            useSecondSet: use_second_set,
         }
     }
 }
@@ -136,6 +149,7 @@ fn consume_distance_events(
             solutions: None,
             estimated_position: None,
             show_radii: false,
+            use_second_solution: false,
         });
         tagstate.distances.insert(ev.anchor_id, ev.distance);
     }
@@ -159,13 +173,12 @@ fn trilaterate_2d(a: Vec2, inr1: f32, b: Vec2, inr2: f32) -> Option<(Vec2, Vec2)
     let mut r2 = inr2;
 
     if d > r1 + r2 {
-        let deficit = d - r1 + r2;
+        let deficit = (d - (r1 + r2)) / 2. + 0.01;
         r1 += deficit;
         r2 += deficit;
     } else if d < (r1 - r2).abs() {
         return None;
-    }
-    else if d > r1 + r2 || d < (r1 - r2).abs() || d < 1e-9 {
+    } else if d > r1 + r2 || d < (r1 - r2).abs() || d < 1e-9 {
         return None;
     }
 
@@ -186,8 +199,12 @@ fn trilaterate_2d(a: Vec2, inr1: f32, b: Vec2, inr2: f32) -> Option<(Vec2, Vec2)
 /// Returns the estimated position using gradient descent to minimize
 /// the sum of squared differences between measured and geometric distances.
 fn multilaterate_least_squares(anchors: &[(Vec2, f32)]) -> Option<Vec2> {
-    if anchors.is_empty() { return None; }
-    if anchors.len() == 1 { return Some(anchors[0].0); }
+    if anchors.is_empty() {
+        return None;
+    }
+    if anchors.len() == 1 {
+        return Some(anchors[0].0);
+    }
 
     // Use trilateration exactly for 2 anchors, returning the midpoint of solutions or best guess
     // but a gradient descent works reasonably well to find a viable minimum anyway.
@@ -228,10 +245,12 @@ fn triangulation_ui(
     mut contexts: EguiContexts,
     mut state: ResMut<TriangulationState>,
     mut provider: ResMut<ActiveDistanceProvider>,
+    mut background: Query<&mut Transform, With<BackgroundImage>>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else {
         return;
     };
+    let ss = state.useSecondSet.clone();
 
     egui::Window::new("Triangulation")
         .default_width(300.0)
@@ -257,7 +276,7 @@ fn triangulation_ui(
             let mut to_remove = None;
             let mut anchors_sorted: Vec<_> = state.anchors.iter_mut().collect();
             anchors_sorted.sort_by_key(|(id, _)| **id);
-            
+
             for (&id, pos) in anchors_sorted {
                 ui.horizontal(|ui| {
                     ui.label(format!("Anchor {} x:", id));
@@ -288,16 +307,13 @@ fn triangulation_ui(
 
             let manual = provider.kind == DistanceProviderKind::Manual;
 
-            let mut use_second_solution = state.use_second_solution;
-
-            ui.checkbox(&mut use_second_solution, "Use second solution (for 2 anchors)");
-            
             let anchor_keys: Vec<_> = state.anchors.keys().copied().collect();
             let anchors_clone = state.anchors.clone(); // Clone to avoid multiple borrow issues
 
             for (tag_id, tagstate) in state.tagstates.iter_mut() {
                 ui.label(format!("Tag {}", tag_id));
                 ui.checkbox(&mut tagstate.show_radii, "Show radii");
+                ui.checkbox(&mut tagstate.use_second_solution, "Use second solution");
 
                 let mut distances_sorted: Vec<_> = tagstate.distances.iter_mut().collect();
                 distances_sorted.sort_by_key(|(id, _)| **id);
@@ -327,12 +343,15 @@ fn triangulation_ui(
                         }
                     });
                 }
-                
+
                 // For manual mode, allow adding distances for newly added anchors
                 if manual {
                     for &anchor_id in &anchor_keys {
                         if !tagstate.distances.contains_key(&anchor_id) {
-                            if ui.button(format!("Add distance for Anchor {}", anchor_id)).clicked() {
+                            if ui
+                                .button(format!("Add distance for Anchor {}", anchor_id))
+                                .clicked()
+                            {
                                 tagstate.distances.insert(anchor_id, Some(0.0));
                             }
                         }
@@ -340,7 +359,7 @@ fn triangulation_ui(
                 }
 
                 // ----- Solve -----
-                
+
                 // Collect available data for solving
                 let mut valid_measurements = Vec::new();
                 for (&anchor_id, &opt_dist) in tagstate.distances.iter() {
@@ -353,15 +372,31 @@ fn triangulation_ui(
 
                 if valid_measurements.len() == 2 {
                     tagstate.solutions = trilaterate_2d(
-                        valid_measurements[0].0, valid_measurements[0].1,
-                        valid_measurements[1].0, valid_measurements[1].1
+                        valid_measurements[0].0,
+                        valid_measurements[0].1,
+                        valid_measurements[1].0,
+                        valid_measurements[1].1,
                     );
-                    tagstate.estimated_position = if use_second_solution {
+
+                    let anchorsinrange: Vec<usize> = tagstate
+                        .distances
+                        .iter()
+                        .filter_map(|(&k, v)| v.map(|_| k))
+                        .collect();
+
+                    let sorted_tuple = (anchorsinrange.len() == 2).then(|| {
+                        let (a, b) = (anchorsinrange[0], anchorsinrange[1]);
+                        (a.min(b), a.max(b))
+                    });
+
+                    tagstate.estimated_position = if let Some(uskey) = sorted_tuple
+                        && ss.contains(&uskey)
+                    {
                         tagstate.solutions.map(|s| s.1)
                     } else {
                         tagstate.solutions.map(|s| s.0)
                     };
-                } else if valid_measurements.len() > 2 {
+                } else if valid_measurements.len() >= 2 {
                     tagstate.solutions = None;
                     tagstate.estimated_position = multilaterate_least_squares(&valid_measurements);
                 } else {
@@ -377,7 +412,7 @@ fn triangulation_ui(
                         "Not enough data or no intersection",
                     );
                 }
-                
+
                 ui.separator();
             }
 
@@ -403,7 +438,7 @@ fn triangulation_ui(
                         }
                     }
                 }
-                
+
                 for (_tag_id, tagstate) in &state.tagstates {
                     if let Some(pos) = tagstate.estimated_position {
                         for (&_id, &a) in state.anchors.iter() {
@@ -414,7 +449,34 @@ fn triangulation_ui(
 
                 state.scale = TriangulationState::default().scale / (maxdist / 2.0);
             }
+
+            for (mut transform) in &mut background {
+                // background position and scale
+                ui.horizontal(|ui| {
+                    ui.label(format!("Background:"));
+                    ui.add(egui::DragValue::new(&mut transform.translation.x).speed(0.05));
+                    ui.label("y:");
+                    ui.add(egui::DragValue::new(&mut transform.translation.y).speed(0.05));
+                    ui.label("scale:");
+
+                    ui.add(egui::DragValue::new(&mut state.bgscale).speed(0.001));
+                    transform.scale.x = state.bgscale * state.scale;
+                    transform.scale.y = state.bgscale * state.scale;
+                    transform.scale.z = state.bgscale * state.scale;
+                });
+            }
         });
+}
+
+#[derive(Component)]
+struct BackgroundImage; // Component for overlayed background image (map or sattelite pic of location)
+
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        Sprite::from_image(asset_server.load("parking.png")),
+        BackgroundImage,
+        Transform::from_xyz(206., 120., 0.),
+    ));
 }
 
 /// Draw anchors, distance circles, and the estimated position using gizmos.
@@ -443,17 +505,18 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
         gizmos.circle_2d(screen_pos, 8.0, color);
     }
 
-    // --- Lines between anchors ---
-    let anchor_ids: Vec<_> = state.anchors.keys().copied().collect();
-    for i in 0..anchor_ids.len() {
-        for j in (i + 1)..anchor_ids.len() {
-            let p1 = state.anchors[&anchor_ids[i]] * s;
-            let p2 = state.anchors[&anchor_ids[j]] * s;
-            gizmos.line_2d(p1, p2, Color::srgba(1.0, 1.0, 1.0, 0.15));
-        }
-    }
+    // // --- Lines between anchors ---
+    // let anchor_ids: Vec<_> = state.anchors.keys().copied().collect();
+    // for i in 0..anchor_ids.len() {
+    //     for j in (i + 1)..anchor_ids.len() {
+    //         let p1 = state.anchors[&anchor_ids[i]] * s;
+    //         let p2 = state.anchors[&anchor_ids[j]] * s;
+    //         gizmos.line_2d(p1, p2, Color::srgba(1.0, 1.0, 1.0, 0.15));
+    //     }
+    // }
 
     for (_tag_id, tagstate) in state.tagstates.iter() {
+        // radii if enabled
         if tagstate.show_radii || tagstate.estimated_position.is_none() {
             for (&anchor_id, &opt_dist) in tagstate.distances.iter() {
                 if let Some(dist) = opt_dist {
@@ -472,8 +535,8 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
         if let Some((p1, p2)) = tagstate.solutions {
             let p1_screen = p1 * s;
             let p2_screen = p2 * s;
-            
-            let (_chosen_screen, other_screen) = if state.use_second_solution {
+
+            let (_chosen_screen, other_screen) = if tagstate.use_second_solution {
                 (p2_screen, p1_screen)
             } else {
                 (p1_screen, p2_screen)
@@ -502,7 +565,10 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
             );
 
             // Lines from anchors to chosen point
-            for (&anchor_id, _) in tagstate.distances.iter() {
+            for (&anchor_id, distance) in tagstate.distances.iter() {
+                if distance.is_none() {
+                    continue;
+                }
                 if let Some(&anchor_pos) = state.anchors.get(&anchor_id) {
                     let anchor_screen = anchor_pos * s;
                     let hue = ((anchor_id as f32) * 137.5) % 360.0;

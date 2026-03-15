@@ -2,7 +2,6 @@
 
 ### Developing a multi tag UWB realtime tracking system around the Qorvo DW3000 platform for potential use in future 12Urenloop editions.
 
-
 ## Goals
 - [x] Ranging between 2 modules
 - [x] Improving range (ideally ~30 meters)
@@ -20,14 +19,19 @@
 - [ ] Lap counting/timing/tracking system
 
 
-## code/controlserver
-For sending commands to the ESP32 (reading and writing registers and OTP. Receives metrics (like distance and rssi) from UWB modules and publishes them on MQTT.
+## code/ranging/dwmware_v3
+Anchor and tag firmware using PlatformIO and Arduino framework, targetting ESP32-Wroom with DWM3000EVB board. The synchronisation between anchors is via ESP-NOW (this will probably change to GPS timing or UWB in the future). 
 
 ## code/dashboard
-Bevy app that plots realtime metrics coming from MQTT.
+Positioning server and visualization for data coming from UWB modules.
+- Plots realtime metrics like RSSI coming from MQTT.
+- Triangulates positions and displays the results visually.
+- Can simulate realtime data from log files from UWB modules for later analysis
 
-## code/ESP32/tag
-tag code from [CircuitDigest](https://github.com/Circuit-Digest/ESP32-DWM3000-UWB-Indoor-RTLS-Tracker), with extra comments and logic to receive commands from server. This allows you to get and set registers and OTP memory interactively.
+## code/controlserver
+For sending commands to anchors and tags to configure UWB modules in realtime (reading and writing registers and OTP. Receives metrics (like distance and rssi) and publishes them on MQTT.
 
-## code/ESP32/anchor
-anchor code from [CircuitDigest](https://github.com/Circuit-Digest/ESP32-DWM3000-UWB-Indoor-RTLS-Tracker), with extra comments and (coming soon) logic to receive commands from server. This allows you to get and set registers and OTP memory interactively.
+# Project status
+### First outdoor test (bad coverage, worst case scenario): [Watch video here](https://mattermost.zeus.gent/files/bj4pd1zdd7rg5xdo87kudsfhje/public?h=66uNqb_PoHTUd7TrrOXdnlIjC-n7Gycecf7ml2fecYE)
+
+![Video](https://mattermost.zeus.gent/files/bj4pd1zdd7rg5xdo87kudsfhje/public?h=66uNqb_PoHTUd7TrrOXdnlIjC-n7Gycecf7ml2fecYE)

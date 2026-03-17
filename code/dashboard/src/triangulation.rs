@@ -103,27 +103,68 @@ pub struct TriangulationState {
     /// Visual scale: pixels per unit distance.
     pub scale: f32,
     pub bgscale: f32,
-    pub useSecondSet: HashSet<(usize, usize)>, // (anchorid1, anchorid2) -> use second solution when these 2 anchors are available
+    pub show_extradebug: bool, // show extra debug ui like lines from anchors to tags
+    pub use_second: HashSet<(usize, usize)>, // (anchorid1, anchorid2) -> use second solution when these 2 anchors are available
+    pub use_lut: bool,
+    pub lut: Vec<(f32, f32)>, // (measured, actual)
+}
+
+fn apply_lut(distance: f32, lut: &[(f32, f32)]) -> f32 {
+    if lut.is_empty() {
+        return distance;
+    }
+    if lut.len() == 1 {
+        return lut[0].1;
+    }
+
+    // Assuming lut is sorted by measured distance (lut[i].0)
+    if distance <= lut[0].0 {
+        return lut[0].1;
+    }
+    let last = lut.len() - 1;
+    if distance >= lut[last].0 {
+        return lut[last].1;
+    }
+
+    for i in 0..last {
+        let (m1, a1) = lut[i];
+        let (m2, a2) = lut[i + 1];
+        if distance >= m1 && distance <= m2 {
+            let t = (distance - m1) / (m2 - m1);
+            return a1 + t * (a2 - a1);
+        }
+    }
+    distance
 }
 
 impl Default for TriangulationState {
     fn default() -> Self {
         let mut anchors = HashMap::new();
-        anchors.insert(1, Vec2::new(0.0, -0.5));
-        anchors.insert(2, Vec2::new(32.8, 0.0));
-        anchors.insert(3, Vec2::new(39.7, 12.7));
+
+        // parking 1
+        // anchors.insert(1, Vec2::new(0.0, -0.5));
+        // anchors.insert(2, Vec2::new(32.8, 0.0));
+        // anchors.insert(3, Vec2::new(39.7, 12.7));
+
+        // gras 1
+        anchors.insert(1, Vec2::new(11.8, 18.4));
+        anchors.insert(2, Vec2::new(22.9, 0.0));
+        anchors.insert(3, Vec2::new(0., 0.));
 
         let mut use_second_set = HashSet::new();
         use_second_set.insert((1, 2));
         // use_second_map.insert((2, 3));
-        use_second_set.insert((1, 3));
+        // use_second_set.insert((1, 3));
 
         Self {
             anchors,
             tagstates: HashMap::new(),
             scale: 10.0,
             bgscale: 0.05,
-            useSecondSet: use_second_set,
+            use_second: use_second_set,
+            show_extradebug: true,
+            use_lut: false,
+            lut: vec![(0.0, 0.0), (10.0, 10.0)],
         }
     }
 }
@@ -250,7 +291,40 @@ fn triangulation_ui(
     let Ok(ctx) = contexts.ctx_mut() else {
         return;
     };
-    let ss = state.useSecondSet.clone();
+    let ss = state.use_second.clone();
+
+    egui::Window::new("Calibration LUT")
+        .default_width(250.0)
+        .show(ctx, |ui| {
+            ui.checkbox(&mut state.use_lut, "Enable Calibration LUT");
+            ui.separator();
+
+            let mut to_remove = None;
+            for (i, sample) in state.lut.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    ui.label("Measured:");
+                    ui.add(egui::DragValue::new(&mut sample.0).speed(0.1));
+                    ui.label("Actual:");
+                    ui.add(egui::DragValue::new(&mut sample.1).speed(0.1));
+                    if ui.button("X").clicked() {
+                        to_remove = Some(i);
+                    }
+                });
+            }
+            if let Some(i) = to_remove {
+                state.lut.remove(i);
+            }
+            if ui.button("Add Sample").clicked() {
+                let last_measured = state.lut.last().map(|s| s.0).unwrap_or(0.0);
+                let last_actual = state.lut.last().map(|s| s.1).unwrap_or(0.0);
+                state.lut.push((last_measured + 1.0, last_actual + 1.0));
+            }
+
+            // Keep it sorted by measured distance
+            state
+                .lut
+                .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        });
 
     egui::Window::new("Triangulation")
         .default_width(300.0)
@@ -309,6 +383,8 @@ fn triangulation_ui(
 
             let anchor_keys: Vec<_> = state.anchors.keys().copied().collect();
             let anchors_clone = state.anchors.clone(); // Clone to avoid multiple borrow issues
+            let use_lut = state.use_lut;
+            let lut = state.lut.clone();
 
             for (tag_id, tagstate) in state.tagstates.iter_mut() {
                 ui.label(format!("Tag {}", tag_id));
@@ -359,11 +435,15 @@ fn triangulation_ui(
                 }
 
                 // ----- Solve -----
+                let dtr = 25.;
 
                 // Collect available data for solving
                 let mut valid_measurements = Vec::new();
                 for (&anchor_id, &opt_dist) in tagstate.distances.iter() {
-                    if let Some(dist) = opt_dist {
+                    if let Some(mut dist) = opt_dist {
+                        if use_lut {
+                            dist = apply_lut(dist, &lut);
+                        }
                         if let Some(&pos) = anchors_clone.get(&anchor_id) {
                             valid_measurements.push((pos, dist));
                         }
@@ -427,6 +507,8 @@ fn triangulation_ui(
                         .range(10.0..=1000.0),
                 );
             });
+
+            ui.checkbox(&mut state.show_extradebug, "Show debug UI");
 
             if ui.button("Auto scale").clicked() {
                 // Maximum distance between 2 points for auto scaling
@@ -515,7 +597,7 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
     //     }
     // }
 
-    for (_tag_id, tagstate) in state.tagstates.iter() {
+    for (tag_id, tagstate) in state.tagstates.iter() {
         // radii if enabled
         if tagstate.show_radii || tagstate.estimated_position.is_none() {
             for (&anchor_id, &opt_dist) in tagstate.distances.iter() {
@@ -546,34 +628,39 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
             gizmos.circle_2d(other_screen, 5.0, Color::srgba(1.0, 1.0, 0.0, 0.25));
         }
 
+        // for one solution (>=3 anchors in range)
         if let Some(pos) = tagstate.estimated_position {
             let chosen_screen = pos * s;
+            let hue = (((tag_id + 4) as f32) * 137.5) % 360.0;
+            let color = Color::hsla(hue, 0.8, 0.5, 0.5);
             // Chosen estimated position (yellow)
-            gizmos.circle_2d(chosen_screen, 7.0, Color::srgb(1.0, 1.0, 0.0));
+            gizmos.circle_2d(chosen_screen, 7.0, color);
 
             // Cross-hair on chosen position
             let ch = 12.0;
             gizmos.line_2d(
                 chosen_screen + Vec2::new(-ch, 0.0),
                 chosen_screen + Vec2::new(ch, 0.0),
-                Color::srgb(1.0, 1.0, 0.0),
+                color,
             );
             gizmos.line_2d(
                 chosen_screen + Vec2::new(0.0, -ch),
                 chosen_screen + Vec2::new(0.0, ch),
-                Color::srgb(1.0, 1.0, 0.0),
+                color,
             );
 
             // Lines from anchors to chosen point
-            for (&anchor_id, distance) in tagstate.distances.iter() {
-                if distance.is_none() {
-                    continue;
-                }
-                if let Some(&anchor_pos) = state.anchors.get(&anchor_id) {
-                    let anchor_screen = anchor_pos * s;
-                    let hue = ((anchor_id as f32) * 137.5) % 360.0;
-                    let color = Color::hsla(hue, 0.8, 0.5, 0.5);
-                    gizmos.line_2d(anchor_screen, chosen_screen, color);
+            if state.show_extradebug {
+                for (&anchor_id, distance) in tagstate.distances.iter() {
+                    if distance.is_none() {
+                        continue;
+                    }
+                    if let Some(&anchor_pos) = state.anchors.get(&anchor_id) {
+                        let anchor_screen = anchor_pos * s;
+                        let hue = ((anchor_id as f32) * 137.5) % 360.0;
+                        let color = Color::hsla(hue, 0.8, 0.5, 0.5);
+                        gizmos.line_2d(anchor_screen, chosen_screen, color);
+                    }
                 }
             }
         }

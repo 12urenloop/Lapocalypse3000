@@ -32,4 +32,5 @@ Positioning server and visualization for data coming from UWB modules.
 For sending commands to anchors and tags to configure UWB modules in realtime (reading and writing registers and OTP. Receives metrics (like distance and rssi) and publishes them on MQTT.
 
 # Project status
+### Demo video [here](https://mattermost.zeus.gent/files/a3uyukxq7fr3xgh8smr41m8c8y/public?h=9EqalStLvKMUJPbeFxvve5GTdjRCBi3U7PJmxrKU3Yg)
 ### First outdoor test (bad coverage, worst case scenario): [Raw data video here](https://mattermost.zeus.gent/files/bj4pd1zdd7rg5xdo87kudsfhje/public?h=66uNqb_PoHTUd7TrrOXdnlIjC-n7Gycecf7ml2fecYE)

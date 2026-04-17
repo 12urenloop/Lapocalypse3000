@@ -10,7 +10,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 /// Any distance provider emits this event to feed a new measurement into the
 /// triangulation system. `anchor_index` maps to the anchor list in
 /// [`TriangulationState`] (0 = A, 1 = B, …).
-#[derive(Event, Debug, Clone)]
+#[derive(Message, Debug, Clone)]
 pub struct DistanceMeasurement {
     pub anchor_id: usize,
     pub tag_id: usize,
@@ -71,7 +71,7 @@ impl Plugin for TriangulationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TriangulationState>()
             .init_resource::<ActiveDistanceProvider>()
-            .add_event::<DistanceMeasurement>()
+            .add_message::<DistanceMeasurement>()
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
@@ -174,7 +174,7 @@ impl Default for TriangulationState {
 // ---------------------------------------------------------------------------
 
 fn consume_distance_events(
-    mut events: EventReader<DistanceMeasurement>,
+    mut events: MessageReader<DistanceMeasurement>,
     provider: Res<ActiveDistanceProvider>,
     mut state: ResMut<TriangulationState>,
 ) {

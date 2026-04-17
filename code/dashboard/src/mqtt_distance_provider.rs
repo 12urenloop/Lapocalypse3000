@@ -4,9 +4,7 @@ use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::triangulation::{
-    ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind,
-};
+use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind};
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -124,7 +122,7 @@ fn setup_mqtt_connection(
 fn forward_mqtt_to_events(
     receiver: Option<Res<MqttDistanceReceiver>>,
     provider: Res<ActiveDistanceProvider>,
-    mut events: EventWriter<DistanceMeasurement>,
+    mut events: MessageWriter<DistanceMeasurement>,
     mut tracker: Local<HashMap<(usize, usize), f64>>,
     time: Res<Time>,
 ) {

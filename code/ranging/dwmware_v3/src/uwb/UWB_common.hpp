@@ -44,6 +44,8 @@ const uint8_t PIN_SS = 4;   // spi select
 #define RES_MSG_DELAY_IDX 3
 #define RESP_MSG_TS_LEN 4
 #define POLL_TX_TO_RESP_RX_DLY_UUS 240
+#define POLL_SYSTS_IDX 5
+#define RESP_SYSTS_IDX 9
 
 /* Frame sequence number, incremented after each transmission. */
 uint8_t frame_seq_nb = 0;

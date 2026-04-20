@@ -3,6 +3,8 @@
 #include <Dw3000/src/dw3000.h>
 #include <boards.hpp>
 
+#define MS_TO_DWT_TIME 249601 //249 600.639
+
 #define N_TAGS 2
 #define ANCHORBROADCAST 0xFF // broadcast address
 
@@ -62,7 +64,7 @@ extern dwt_txconfig_t txconfig_options;
 
 /* Buffer to store received response message.
  * Its size is adjusted to longest frame that this example code is supposed to handle. */
-#define RX_BUF_LEN 12
+#define RX_BUF_LEN 16
 uint8_t rx_buffer[RX_BUF_LEN];
 
 /* Default communication configuration. We use default non-STS DW mode. */

@@ -10,16 +10,15 @@
 #define UWB_DEBUG true
 #endif
 
-#define MS_TO_DWT_TIME 249601 //249 600.639
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes, UWB sys timestamp 4 bytes.
-uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0, 1, 2, 3, 4};
+uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0, 1, 2, 3, 4, 0, 0};
 
 //layout: sender, receiver, marker id, timestamp 4 bytes, unused 2 bytes.
 uint8_t tx_marker_msg[] = {0x0 + ANCHOR_ID, ANCHORBROADCAST, 0xE5, 0, 0, 0, 0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes, UWB sys timestamp 4 bytes.
-uint8_t rx_resp_msg[] = {0xA1, 0x0 + ANCHOR_ID, 0xE1, 1, 2, 3, 4, 0, 0, 1, 2, 3, 4};
+uint8_t rx_resp_msg[] = {0xA1, 0x0 + ANCHOR_ID, 0xE1, 1, 2, 3, 4, 0, 0, 1, 2, 3, 4, 0, 0};
 
 class SSTWR_Initiator : UWB_Common
 {
@@ -136,11 +135,12 @@ public:
         uint32_t systime = dwt_readsystimestamphi32();
         dwt_write32bitreg(SYS_TIME_ID, 0);
         uint32_t synctime = systime + uwb_sync_offset;
-        uint32_t next_tx = synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME);
+        uint32_t next_tx = (uint32_t)( synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME));
         if(next_tx < synctime + MS_TO_DWT_TIME * 2) next_tx += anchorConfig.slotIntervalMS * MS_TO_DWT_TIME;
         // uint32_t next_tx = synctime + MS_TO_DWT_TIME * 50;
         // Serial.print("systime: "); Serial.print(systime); Serial.print(" synctime: "); Serial.print(synctime); Serial.print(" next_tx: "); Serial.println(next_tx);
         dwt_setdelayedtrxtime(next_tx - uwb_sync_offset);
+        // next_tx = 0xF0F0;
         resp_msg_set_ts(&tx_poll_msg[POLL_SYSTS_IDX], next_tx); // set tx UWB sys timestamp in poll message for sync
         dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. */
         dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);          /* Zero offset in TX buffer, ranging. */
@@ -156,6 +156,8 @@ public:
             delay(100);
             return;
         }
+
+        Serial.print("sent: "); Serial.println(next_tx / MS_TO_DWT_TIME, HEX);
 
         /* Poll DW IC until TX frame sent event set. See NOTE 6 below. */
         while (!(status_reg = dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
@@ -197,7 +199,7 @@ public:
 
                 /* Check that the frame is the expected response from the companion "SS TWR responder" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                rx_buffer[ALL_MSG_SN_IDX] = 0;
+                // rx_buffer[ALL_MSG_SN_IDX] = 0;
                 if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
                 {
                     uint32_t poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
@@ -222,11 +224,19 @@ public:
                     // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
                     resp_msg_get_ts(&rx_buffer[RES_MSG_DELAY_IDX], &uint_rtd_resp);
                     uint32_t resp_systs;
+
                     resp_msg_get_ts(&rx_buffer[RESP_SYSTS_IDX], &resp_systs);
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
                     uint32_t synctime = rxsystime + uwb_sync_offset;
+                    Serial.print("resp_systs: "); Serial.print(resp_systs / MS_TO_DWT_TIME, HEX); Serial.print(" rxsystime: "); Serial.print(rxsystime / MS_TO_DWT_TIME); Serial.print(" synctime: "); Serial.println(synctime / MS_TO_DWT_TIME);
+                    Serial.print("rx_buffer: ");
+                    // for (int i = 0; i < frame_len; i++) {
+                    //     Serial.print(rx_buffer[i], HEX);
+                    //     Serial.print(" ");
+                    // }
                     if(resp_systs > synctime){
                         uwb_sync_offset = resp_systs - rxsystime;
+                        Serial.print("UPDATE uwb_sync_offset: "); Serial.println(uwb_sync_offset / MS_TO_DWT_TIME);
                     }
 
 

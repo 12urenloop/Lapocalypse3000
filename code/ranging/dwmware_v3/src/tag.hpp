@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <uwb/SSTWR_responder.hpp>
+#include <uwb/SSTWR_responder_uwbsync.hpp>
 
 #define USEWIFI false
 #include <connectivity/debugserver.hpp>

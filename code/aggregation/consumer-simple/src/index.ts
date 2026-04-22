@@ -9,12 +9,61 @@ const cfg = {
   dataBindingKey: process.env.DATA_BINDING_KEY ?? "node.*",
   errorExchange: process.env.ERROR_EXCHANGE ?? "uwb.errors",
   outputFile: process.env.OUTPUT_FILE ?? "./data/uwb-measurements.jsonl",
+  latencyReportIntervalMs: Number(process.env.LATENCY_REPORT_INTERVAL_MS ?? "5000"),
   reconnectMinMs: Number(process.env.RECONNECT_MIN_MS ?? "500"),
   reconnectMaxMs: Number(process.env.RECONNECT_MAX_MS ?? "10000"),
 };
 
 let isShuttingDown = false;
 let reconnects = 0;
+let totalLatencySamples = 0;
+let latencySamplesCurrentWindow: number[] = [];
+
+function quantile(sortedValues: number[], q: number): number {
+  if (sortedValues.length === 0) {
+    return 0;
+  }
+
+  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.floor(sortedValues.length * q)));
+  return sortedValues[index];
+}
+
+function recordLatencySample(latencyMs: number): void {
+  latencySamplesCurrentWindow.push(latencyMs);
+  totalLatencySamples += 1;
+}
+
+function reportLatencyWindow(): void {
+  const sampleCount = latencySamplesCurrentWindow.length;
+  if (sampleCount === 0) {
+    console.log("[latency] no samples in this window", {
+      intervalMs: cfg.latencyReportIntervalMs,
+      totalLatencySamples,
+    });
+    return;
+  }
+
+  const sorted = [...latencySamplesCurrentWindow].sort((a, b) => a - b);
+  const sum = latencySamplesCurrentWindow.reduce((acc, value) => acc + value, 0);
+  const avg = sum / sampleCount;
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  const p50 = quantile(sorted, 0.5);
+  const p95 = quantile(sorted, 0.95);
+
+  console.log("[latency] publisher->consumer", {
+    intervalMs: cfg.latencyReportIntervalMs,
+    sampleCount,
+    totalLatencySamples,
+    minMs: Number(min.toFixed(2)),
+    avgMs: Number(avg.toFixed(2)),
+    p50Ms: Number(p50.toFixed(2)),
+    p95Ms: Number(p95.toFixed(2)),
+    maxMs: Number(max.toFixed(2)),
+  });
+
+  latencySamplesCurrentWindow = [];
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -70,6 +119,7 @@ async function persistLine(line: string): Promise<void> {
 
 async function main(): Promise<void> {
   let attempt = 0;
+  const latencyReporter = setInterval(reportLatencyWindow, cfg.latencyReportIntervalMs);
 
   process.on("SIGINT", () => {
     isShuttingDown = true;
@@ -112,10 +162,23 @@ async function main(): Promise<void> {
 
         void (async () => {
           try {
+            const consumedAtMs = Date.now();
             const raw = msg.content.toString();
             const parsed = JSON.parse(raw);
+            const publisherTimestamp =
+              typeof parsed?.publishedAtMs === "number"
+                ? parsed.publishedAtMs
+                : typeof parsed?.createdAtMs === "number"
+                  ? parsed.createdAtMs
+                  : undefined;
+
+            if (typeof publisherTimestamp === "number") {
+              const latencyMs = consumedAtMs - publisherTimestamp;
+              recordLatencySample(latencyMs);
+            }
+
             const line = JSON.stringify({
-              persistedAtMs: Date.now(),
+              persistedAtMs: consumedAtMs,
               routingKey: msg.fields.routingKey,
               payload: parsed,
             });
@@ -170,6 +233,9 @@ async function main(): Promise<void> {
     console.log(`consumer reconnecting in ${String(delayMs)}ms`, { reconnects });
     await sleep(delayMs);
   }
+
+  clearInterval(latencyReporter);
+  reportLatencyWindow();
 
   process.exit(0);
 }

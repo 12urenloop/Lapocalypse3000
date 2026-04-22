@@ -48,6 +48,7 @@ let pending: Measurement[] = [];
 let droppedMeasurements = 0;
 let skippedFlushesForRateLimit = 0;
 let sentMessages = 0;
+let batchSequence = 0;
 let windowSecond = Math.floor(Date.now() / 1000);
 let sentThisWindow = 0;
 let serialReconnects = 0;
@@ -203,6 +204,8 @@ async function flushMeasurements(): Promise<void> {
   const payload = {
     nodeId: cfg.nodeId,
     createdAtMs: Date.now(),
+    publishedAtMs: Date.now(),
+    batchSequence: batchSequence + 1,
     measurements: batch,
     droppedMeasurements,
     skippedFlushesForRateLimit,
@@ -235,6 +238,7 @@ async function flushMeasurements(): Promise<void> {
 
   sentThisWindow += 1;
   sentMessages += 1;
+  batchSequence += 1;
 }
 
 async function configureSerial(): Promise<void> {

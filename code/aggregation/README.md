@@ -118,6 +118,20 @@ Example routing keys:
 
 Create a queue for all error events (RabbitMQ UI or CLI) and bind it to `uwb.errors` with binding key `#`.
 
+## Latency measurement
+
+The consumer reports publisher-to-consumer latency periodically, assuming clocks are synchronized via NTP.
+
+- Publisher includes `publishedAtMs` in each batch payload.
+- Consumer computes latency as:
+	- `latency_ms = consumer_now_ms - payload.publishedAtMs`
+- Consumer prints rolling window stats every few seconds:
+	- `minMs`, `avgMs`, `p50Ms`, `p95Ms`, `maxMs`, and sample counts.
+
+Configure reporting interval in `consumer-simple/.env`:
+
+- `LATENCY_REPORT_INTERVAL_MS` default `5000`
+
 ### Resilience tuning
 
 Publisher settings in `publisher-bun/.env`:
@@ -132,6 +146,7 @@ Consumer settings in `consumer-simple/.env`:
 - `RECONNECT_MIN_MS` default `500`
 - `RECONNECT_MAX_MS` default `10000`
 - `ERROR_EXCHANGE` default `uwb.errors`
+- `LATENCY_REPORT_INTERVAL_MS` default `5000`
 
 Control sender settings in `rabbitmq-server/.env`:
 

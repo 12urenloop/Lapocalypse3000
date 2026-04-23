@@ -43,17 +43,19 @@ pub struct AmqpDistanceProviderConfig {
     pub bind_exchange: Option<String>,
     pub bind_routing_key: String,
     pub declare_queue: bool,
+    pub durablequeue: bool,
 }
 
 impl Default for AmqpDistanceProviderConfig {
     fn default() -> Self {
         Self {
             uri: "amqp://uwb:uwb@localhost:5672".into(),
-            queue: "uwb.dashboard".into(),
+            queue: "uwb.tri".into(),
             consumer_tag: "bevy_triangulation_amqp".into(),
             bind_exchange: Some("uwb.data".into()),
-            bind_routing_key: String::new(),
+            bind_routing_key: "node.*".into(),
             declare_queue: true,
+            durablequeue: false,
         }
     }
 }
@@ -196,7 +198,21 @@ fn setup_amqp_connection(
                 match std::str::from_utf8(&delivery.data) {
                     Ok(text) => match serde_json::from_str::<AmqpEnvelope>(text) {
                         Ok(msg) => {
-                            let anchor_id = parse_anchor_id(&msg.node_id);
+                            let anchor_id: usize = msg
+                                .node_id
+                                .chars()
+                                .filter(|c| c.is_ascii_digit())
+                                .collect::<String>()
+                                .parse::<u32>()
+                                .map(|v| v as usize)
+                                .unwrap_or_else(|parse_err| {
+                                    eprintln!(
+                                        "[AMQP] invalid nodeId='{}': {}",
+                                        msg.node_id, parse_err
+                                    );
+                                    0
+                                });
+                            // let anchor_id = &msg.node_id;
 
                             // only use the last sample per tag id in each message
                             let mut last_by_tag: StdHashMap<usize, f32> = StdHashMap::new();
@@ -312,7 +328,7 @@ async fn setup_queue_and_binding(
             .queue_declare(
                 &cfg.queue,
                 QueueDeclareOptions {
-                    durable: false,
+                    durable: cfg.durablequeue,
                     ..QueueDeclareOptions::default()
                 },
                 FieldTable::default(),
@@ -340,30 +356,6 @@ async fn setup_queue_and_binding(
     }
 
     Ok(())
-}
-
-fn parse_anchor_id(node_id: &str) -> usize {
-    // Prefer trailing digits: "pi-01" -> 1
-    let digits_rev: String = node_id
-        .chars()
-        .rev()
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
-
-    if !digits_rev.is_empty() {
-        let digits: String = digits_rev.chars().rev().collect();
-        if let Ok(v) = digits.parse::<usize>() {
-            return v;
-        }
-    }
-
-    // Fallback: deterministic hash to a compact positive id range
-    let mut h: u64 = 1469598103934665603; // FNV-1a offset basis
-    for b in node_id.as_bytes() {
-        h ^= *b as u64;
-        h = h.wrapping_mul(1099511628211); // FNV prime
-    }
-    (h as usize) % 10_000
 }
 
 fn payload_preview(s: &str, max_chars: usize) -> String {

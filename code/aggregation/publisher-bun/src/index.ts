@@ -3,10 +3,10 @@ import { $ } from "bun";
 
 type Measurement = {
   tagId: string;
-  distanceCm: number;
-  syncedTimeMs: number;
-  unsyncedMs: number;
-  receivedAtMs: number;
+  cm: number;
+  syncMs: number;
+  usMs: number;
+  rxMs: number;
 };
 
 type ControlMessage = {
@@ -70,10 +70,10 @@ function parseMeasurement(line: string): Measurement | null {
 
   return {
     tagId: match[1],
-    distanceCm: Number(match[2]),
-    syncedTimeMs: Number(match[3]),
-    unsyncedMs: Number(match[4]),
-    receivedAtMs: Date.now(),
+    cm: Number(match[2]),
+    syncMs: Number(match[3]),
+    usMs: Number(match[4]),
+    rxMs: Date.now(),
   };
 }
 

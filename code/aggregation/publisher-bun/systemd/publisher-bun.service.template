@@ -1,0 +1,23 @@
+[Unit]
+Description=UWB Publisher (Bun)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+WorkingDirectory=__WORKDIR__
+EnvironmentFile=__WORKDIR__/.env
+Environment=PATH=__SERVICE_HOME__/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/env bash __WORKDIR__/deploy.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/var/log/publisher-bun/publisher-bun.log
+StandardError=append:/var/log/publisher-bun/publisher-bun.log
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

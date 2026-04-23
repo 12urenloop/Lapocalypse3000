@@ -1,4 +1,5 @@
 import amqp, { type Channel, type Connection, type ConsumeMessage } from "amqplib";
+import { readdir } from "node:fs/promises";
 import { $ } from "bun";
 
 type Measurement = {
@@ -54,6 +55,7 @@ let sentThisWindow = 0;
 let serialReconnects = 0;
 let amqpReconnects = 0;
 let isShuttingDown = false;
+let activeSerialDevice = cfg.serialDevice;
 
 let conn: Connection | null = null;
 let channel: Channel | null = null;
@@ -95,6 +97,42 @@ function pushMeasurement(measurement: Measurement): void {
     pending.splice(0, overflow);
     droppedMeasurements += overflow;
   }
+}
+
+function sortTtyUsbDevices(a: string, b: string): number {
+  const parseIndex = (value: string) => {
+    const match = value.match(/ttyUSB(\d+)$/);
+    return match ? Number(match[1]) : Number.NaN;
+  };
+
+  const ai = parseIndex(a);
+  const bi = parseIndex(b);
+
+  if (!Number.isNaN(ai) && !Number.isNaN(bi)) {
+    return ai - bi;
+  }
+
+  return a.localeCompare(b);
+}
+
+async function resolveSerialDevice(): Promise<string> {
+  const entries = await readdir("/dev");
+  const devices = entries
+    .filter((entry) => entry.startsWith("ttyUSB"))
+    .map((entry) => `/dev/${entry}`)
+    .sort(sortTtyUsbDevices);
+
+  if (devices.length === 0) {
+    reportError("serial-device-not-found", "no /dev/ttyUSB* device found", true);
+    throw new Error("no /dev/ttyUSB* device found");
+  }
+
+  const selected = devices[devices.length - 1];
+  if (activeSerialDevice !== selected) {
+    console.log(`[serial] selected device ${selected}`);
+  }
+  activeSerialDevice = selected;
+  return selected;
 }
 
 function publishErrorEvent(event: ErrorEvent): void {
@@ -241,21 +279,22 @@ async function flushMeasurements(): Promise<void> {
   bseq += 1;
 }
 
-async function configureSerial(): Promise<void> {
-  const result = await $`stty -F ${cfg.serialDevice} ${String(cfg.serialBaud)} raw -echo -echoe -echok -echoctl -echoke`.nothrow();
+async function configureSerial(serialDevice: string): Promise<void> {
+  const result = await $`stty -F ${serialDevice} ${String(cfg.serialBaud)} raw -echo -echoe -echok -echoctl -echoke`.nothrow();
   if (result.exitCode !== 0) {
-    reportError("serial-config-failed", `failed to configure serial device ${cfg.serialDevice}`, true, {
-      serialDevice: cfg.serialDevice,
+    reportError("serial-config-failed", `failed to configure serial device ${serialDevice}`, true, {
+      serialDevice,
       serialBaud: cfg.serialBaud,
     });
-    throw new Error(`failed to configure serial device ${cfg.serialDevice}`);
+    throw new Error(`failed to configure serial device ${serialDevice}`);
   }
 }
 
 async function runSerialReaderOnce(): Promise<void> {
-  await configureSerial();
+  const serialDevice = cfg.serialDevice == "auto" ? await resolveSerialDevice() : cfg.serialDevice;
+  await configureSerial(serialDevice);
 
-  const proc = Bun.spawn(["cat", cfg.serialDevice], {
+  const proc = Bun.spawn(["cat", serialDevice], {
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -415,6 +454,7 @@ async function main(): Promise<void> {
       skippedFlushesForRateLimit,
       serialReconnects,
       amqpReconnects,
+      activeSerialDevice,
       limits,
     });
   }, 5000);

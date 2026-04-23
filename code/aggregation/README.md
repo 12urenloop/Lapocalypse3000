@@ -38,6 +38,41 @@ cp .env.example .env
 ./deploy.sh
 ```
 
+### Run Publisher With systemd
+
+The repository includes a systemd unit template that runs `deploy.sh`, auto-restarts on failure, and limits restart storms.
+
+- Restart policy: `Restart=on-failure`
+- Restart delay: `RestartSec=10`
+- Max restart bursts: `StartLimitBurst=5` within `StartLimitIntervalSec=3600` (1 hour)
+
+Setup on the Raspberry Pi:
+
+```bash
+cd publisher-bun
+cp .env.example .env
+./systemd/install-systemd.sh
+```
+
+Optional: pass service user explicitly:
+
+```bash
+./systemd/install-systemd.sh pi
+```
+
+The installer also configures log rotation for:
+
+- `/var/log/publisher-bun/publisher-bun.log`
+
+Useful commands:
+
+```bash
+sudo systemctl status publisher-bun.service
+sudo systemctl restart publisher-bun.service
+tail -f /var/log/publisher-bun/publisher-bun.log
+sudo logrotate -f /etc/logrotate.d/publisher-bun
+```
+
 ## 4) Logstash persistence consumer (optional, central)
 
 ```bash

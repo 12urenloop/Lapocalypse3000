@@ -1,0 +1,10 @@
+/var/log/publisher-bun/publisher-bun.log {
+    hourly
+    rotate 24
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    create 0640 __SERVICE_USER__ __SERVICE_GROUP__
+}

@@ -49,7 +49,7 @@ impl Default for AmqpDistanceProviderConfig {
     fn default() -> Self {
         Self {
             uri: "amqp://uwb:uwb@localhost:5672".into(),
-            queue: "uwb.persist".into(),
+            queue: "uwb.dashboard".into(),
             consumer_tag: "bevy_triangulation_amqp".into(),
             bind_exchange: Some("uwb.data".into()),
             bind_routing_key: String::new(),
@@ -312,7 +312,7 @@ async fn setup_queue_and_binding(
             .queue_declare(
                 &cfg.queue,
                 QueueDeclareOptions {
-                    durable: true,
+                    durable: false,
                     ..QueueDeclareOptions::default()
                 },
                 FieldTable::default(),

@@ -5,6 +5,7 @@ This workspace contains three parts:
 - `publisher-bun`: Raspberry Pi publisher that ingests UWB serial lines, batches data, and publishes to RabbitMQ.
 - `rabbitmq-server`: RabbitMQ deployment and central control message sender.
 - `consumer-simple`: Minimal consumer that persists incoming messages to a JSONL text file.
+- `logstash-persist`: Logstash consumer that reads from RabbitMQ and persists JSON lines to file.
 
 ## 1) RabbitMQ server (central)
 
@@ -36,6 +37,22 @@ cd publisher-bun
 cp .env.example .env
 ./deploy.sh
 ```
+
+## 4) Logstash persistence consumer (optional, central)
+
+```bash
+cd logstash-persist
+cp .env.example .env
+./deploy.sh
+```
+
+Default persisted output path inside the container:
+
+- `/usr/share/logstash/data/uwb-logstash.jsonl`
+
+On the host this is mounted under:
+
+- `logstash-persist/data/`
 
 Expected serial line format:
 
@@ -108,7 +125,7 @@ Error events are published as JSON with fields like:
 - `message`
 - `recoverable`
 - `details`
-- `createdAtMs`
+- `crMS`
 
 Example routing keys:
 
@@ -122,9 +139,9 @@ Create a queue for all error events (RabbitMQ UI or CLI) and bind it to `uwb.err
 
 The consumer reports publisher-to-consumer latency periodically, assuming clocks are synchronized via NTP.
 
-- Publisher includes `publishedAtMs` in each batch payload.
+- Publisher includes `pubMS` in each batch payload.
 - Consumer computes latency as:
-	- `latency_ms = consumer_now_ms - payload.publishedAtMs`
+	- `latency_ms = consumer_now_ms - payload.pubMS`
 - Consumer prints rolling window stats every few seconds:
 	- `minMs`, `avgMs`, `p50Ms`, `p95Ms`, `maxMs`, and sample counts.
 

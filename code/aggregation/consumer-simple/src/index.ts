@@ -97,7 +97,7 @@ function reportError(
           message,
           recoverable,
           details,
-          createdAtMs: Date.now(),
+          crMS: Date.now(),
         }),
       ),
       {
@@ -166,10 +166,10 @@ async function main(): Promise<void> {
             const raw = msg.content.toString();
             const parsed = JSON.parse(raw);
             const publisherTimestamp =
-              typeof parsed?.publishedAtMs === "number"
-                ? parsed.publishedAtMs
-                : typeof parsed?.createdAtMs === "number"
-                  ? parsed.createdAtMs
+              typeof parsed?.pubMS === "number"
+                ? parsed.pubMS
+                : typeof parsed?.crMS === "number"
+                  ? parsed.crMS
                   : undefined;
 
             if (typeof publisherTimestamp === "number") {
@@ -178,9 +178,9 @@ async function main(): Promise<void> {
             }
 
             const line = JSON.stringify({
-              persistedAtMs: consumedAtMs,
-              routingKey: msg.fields.routingKey,
-              payload: parsed,
+              pMS: consumedAtMs,
+              id: msg.fields.routingKey,
+              dat: parsed,
             });
 
             await persistLine(line);

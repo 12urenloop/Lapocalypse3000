@@ -1,0 +1,14 @@
+services:
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.14.3
+    container_name: uwb-logstash-persist
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      LS_JAVA_OPTS: "-Xms256m -Xmx256m"
+    volumes:
+      - ./pipeline:/usr/share/logstash/pipeline:ro
+      - ./data:/usr/share/logstash/data
+    ports:
+      - "9600:9600"

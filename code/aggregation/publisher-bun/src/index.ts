@@ -22,7 +22,7 @@ type ErrorEvent = {
   message: string;
   recoverable: boolean;
   details?: Record<string, unknown>;
-  createdAtMs: number;
+  crMS: number;
 };
 
 const cfg = {
@@ -48,7 +48,7 @@ let pending: Measurement[] = [];
 let droppedMeasurements = 0;
 let skippedFlushesForRateLimit = 0;
 let sentMessages = 0;
-let batchSequence = 0;
+let bseq = 0;
 let windowSecond = Math.floor(Date.now() / 1000);
 let sentThisWindow = 0;
 let serialReconnects = 0;
@@ -131,7 +131,7 @@ function reportError(
     message,
     recoverable,
     details,
-    createdAtMs: Date.now(),
+    crMS: Date.now(),
   });
 }
 
@@ -203,12 +203,12 @@ async function flushMeasurements(): Promise<void> {
 
   const payload = {
     nodeId: cfg.nodeId,
-    createdAtMs: Date.now(),
-    publishedAtMs: Date.now(),
-    batchSequence: batchSequence + 1,
-    measurements: batch,
-    droppedMeasurements,
-    skippedFlushesForRateLimit,
+    crMS: Date.now(),
+    pubMS: Date.now(),
+    bseq: bseq + 1,
+    data: batch,
+    drop: droppedMeasurements,
+    skip: skippedFlushesForRateLimit,
   };
 
   let published = false;
@@ -238,7 +238,7 @@ async function flushMeasurements(): Promise<void> {
 
   sentThisWindow += 1;
   sentMessages += 1;
-  batchSequence += 1;
+  bseq += 1;
 }
 
 async function configureSerial(): Promise<void> {

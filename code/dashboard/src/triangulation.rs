@@ -28,6 +28,7 @@ pub enum DistanceProviderKind {
     #[default]
     Manual,
     Mqtt,
+    Amqp,
     LogFiles,
 }
 
@@ -36,6 +37,7 @@ impl std::fmt::Display for DistanceProviderKind {
         match self {
             Self::Manual => write!(f, "Manual"),
             Self::Mqtt => write!(f, "MQTT"),
+            Self::Amqp => write!(f, "AMQP"),
             Self::LogFiles => write!(f, "Log Files"),
         }
     }

@@ -1,8 +1,10 @@
+mod amqp_distance_provider;
 mod ffmpeg;
 mod log_distance_provider;
 mod mqtt_distance_provider;
 mod triangulation;
 
+use amqp_distance_provider::AmqpDistanceProviderPlugin;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_metrics_dashboard::{DashboardPlugin, DashboardWindow, RegistryPlugin};
@@ -71,6 +73,7 @@ fn main() {
         // .add_plugins(DashboardPlugin)
         .add_plugins(TriangulationPlugin)
         .add_plugins(MqttDistanceProviderPlugin)
+        .add_plugins(AmqpDistanceProviderPlugin)
         .add_plugins(FfmpegPlugin)
         .add_plugins(log_distance_provider::LogDistanceProviderPlugin)
         // .insert_resource(MqttReceiver { messages })
@@ -82,7 +85,7 @@ fn main() {
 }
 
 fn world_setup(mut commands: Commands) {
-    commands.spawn(Camera3d::default());
+    commands.spawn(Camera2d::default());
 }
 
 fn describe_metrics() {

@@ -1,10 +1,13 @@
 mod amqp_distance_provider;
+mod amqp_position_publisher;
 mod ffmpeg;
 mod log_distance_provider;
 mod mqtt_distance_provider;
+mod simulated_distance_provider;
 mod triangulation;
 
 use amqp_distance_provider::AmqpDistanceProviderPlugin;
+use amqp_position_publisher::AmqpPositionPublisherPlugin;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 use bevy_metrics_dashboard::{DashboardPlugin, DashboardWindow, RegistryPlugin};
@@ -19,6 +22,7 @@ use std::thread;
 use triangulation::TriangulationPlugin;
 
 use crate::ffmpeg::FfmpegPlugin;
+use simulated_distance_provider::SimulatedDistanceProviderPlugin;
 
 #[derive(Deserialize, Debug)]
 struct MqttMessage {
@@ -48,6 +52,10 @@ fn main() {
 
     // // Shared buffer for messages
     let messages: Arc<Mutex<Vec<MqttMessage>>> = Arc::new(Mutex::new(Vec::new()));
+
+    // Note: SimulatedDistanceProviderPlugin registration is assumed to be handled
+    // by appending it to the App builder chain further down in main(), e.g.:
+    // .add_plugins(SimulatedDistanceProviderPlugin)
     // let messages_clone = messages.clone();
 
     // // Spawn thread to handle MQTT events
@@ -76,6 +84,8 @@ fn main() {
         .add_plugins(AmqpDistanceProviderPlugin)
         .add_plugins(FfmpegPlugin)
         .add_plugins(log_distance_provider::LogDistanceProviderPlugin)
+        .add_plugins(SimulatedDistanceProviderPlugin)
+        .add_plugins(AmqpPositionPublisherPlugin)
         // .insert_resource(MqttReceiver { messages })
         .add_systems(Startup, world_setup)
         // .add_systems(Startup, (describe_metrics /*create_dashboard*/,))

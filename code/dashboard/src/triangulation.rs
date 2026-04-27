@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
@@ -30,6 +30,7 @@ pub enum DistanceProviderKind {
     Mqtt,
     Amqp,
     LogFiles,
+    Simulated,
 }
 
 impl std::fmt::Display for DistanceProviderKind {
@@ -39,6 +40,7 @@ impl std::fmt::Display for DistanceProviderKind {
             Self::Mqtt => write!(f, "MQTT"),
             Self::Amqp => write!(f, "AMQP"),
             Self::LogFiles => write!(f, "Log Files"),
+            Self::Simulated => write!(f, "Simulated"),
         }
     }
 }
@@ -74,10 +76,17 @@ impl Plugin for TriangulationPlugin {
         app.init_resource::<TriangulationState>()
             .init_resource::<ActiveDistanceProvider>()
             .add_message::<DistanceMeasurement>()
+            .add_message::<PositionMessage>()
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
                 (consume_distance_events, draw_triangulation).chain(),
+            )
+            .add_systems(
+                Update,
+                export_positions.run_if(bevy::time::common_conditions::on_timer(
+                    std::time::Duration::from_millis(200),
+                )),
             )
             .add_systems(EguiPrimaryContextPass, triangulation_ui);
     }
@@ -196,6 +205,22 @@ fn consume_distance_events(
         });
         tagstate.distances.insert(ev.anchor_id, ev.distance);
     }
+}
+
+#[derive(Message)]
+pub struct PositionMessage {
+    pub tag_id: usize,
+    pub position: Option<Vec2>,
+}
+
+fn export_positions(mut events: MessageWriter<PositionMessage>, state: Res<TriangulationState>) {
+    for tagstate in &state.tagstates {
+        let ok = events.write(PositionMessage {
+            tag_id: *tagstate.0,
+            position: tagstate.1.estimated_position,
+        });
+    }
+    return;
 }
 
 // ---------------------------------------------------------------------------

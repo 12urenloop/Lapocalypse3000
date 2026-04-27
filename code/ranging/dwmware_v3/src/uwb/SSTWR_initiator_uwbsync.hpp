@@ -118,14 +118,13 @@ public:
 
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
         int ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
-
-        Serial.print("ret="); Serial.println(ret);
         if(ret != 0){
+            Serial.print("ret="); Serial.println(ret);
             delay(100);
             return;
         }
 
-        Serial.print("sent: "); Serial.println(next_tx / MS_TO_DWT_TIME, HEX);
+        // Serial.print("sent: "); Serial.println(next_tx / MS_TO_DWT_TIME, HEX);
 
         /* Poll DW IC until TX frame sent event set. See NOTE 6 below. */
         while (!(status_reg = dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
@@ -196,7 +195,7 @@ public:
                     resp_msg_get_ts(&rx_buffer[RESP_SYSTS_IDX], &resp_systs);
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
                     uint32_t synctime = rxsystime + uwb_sync_offset;
-                    Serial.print("resp_systs: "); Serial.print(resp_systs / MS_TO_DWT_TIME, HEX); Serial.print(" rxsystime: "); Serial.print(rxsystime / MS_TO_DWT_TIME); Serial.print(" synctime: "); Serial.println(synctime / MS_TO_DWT_TIME);
+                    // Serial.print("resp_systs: "); Serial.print(resp_systs / MS_TO_DWT_TIME, HEX); Serial.print(" rxsystime: "); Serial.print(rxsystime / MS_TO_DWT_TIME); Serial.print(" synctime: "); Serial.println(synctime / MS_TO_DWT_TIME);
                     // Serial.print("rx_buffer: ");
                     // for (int i = 0; i < frame_len; i++) {
                     //     Serial.print(rx_buffer[i], HEX);

@@ -48,13 +48,36 @@ uint64_t lastReceive = 0;
 
 unsigned long lastreport = 0;
 
+bool uwbOn = true;
 
 void loop()
 {
     // mqtt_loop();
     // debugserver_loop();
 
-    UWBInitiator.slotted_loop();
+    if(uwbOn){
+        UWBInitiator.slotted_loop();
+    }else{
+        delay(1000);
+        Serial.println("send RESET to turn on UWB");
+    }
+
+    {
+        static String serialBuffer = "";
+        while (Serial.available()) {
+            char c = (char)Serial.read();
+            serialBuffer += c;
+            if (serialBuffer.length() > 64) serialBuffer = serialBuffer.substring(serialBuffer.length() - 64);
+            if (serialBuffer.indexOf("RESET") != -1) {
+                serialBuffer = "";
+                ESP.restart();
+            }
+            else if (serialBuffer.indexOf("OFF") != -1) {
+                uwbOn = false;
+                Serial.println("UWB OFF");
+            }
+        }
+    }
 
 
     unsigned long ms = millis();

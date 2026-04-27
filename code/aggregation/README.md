@@ -6,6 +6,7 @@ This workspace contains three parts:
 - `rabbitmq-server`: RabbitMQ deployment and central control message sender.
 - `consumer-simple`: Minimal consumer that persists incoming messages to a JSONL text file.
 - `logstash-persist`: Logstash consumer that reads from RabbitMQ and persists JSON lines to file.
+- `websocket-publisher`: Bun service that consumes `uwb.positions` and republishes messages over WebSocket.
 
 ## 1) RabbitMQ server (central)
 

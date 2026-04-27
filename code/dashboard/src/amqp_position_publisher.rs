@@ -37,7 +37,7 @@ impl Default for AmqpPositionPublisherConfig {
 
 #[derive(Serialize)]
 struct PositionPayload {
-    #[serde(rename = "tagId")]
+    #[serde(rename = "tag_id")]
     tag_id: String,
     x: Option<f32>,
     y: Option<f32>,

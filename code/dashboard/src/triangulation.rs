@@ -158,25 +158,68 @@ impl Default for TriangulationState {
         // anchors.insert(3, Vec2::new(39.7, 12.7));
 
         // gras 1
-        anchors.insert(1, Vec2::new(11.8, 18.4));
-        anchors.insert(2, Vec2::new(22.9, 0.0));
-        anchors.insert(3, Vec2::new(0., 0.));
+        // anchors.insert(1, Vec2::new(11.8, 18.4));
+        // anchors.insert(2, Vec2::new(22.9, 0.0));
+        // anchors.insert(3, Vec2::new(0., 0.));
+
+        // plein 3 4 5
+        anchors.insert(4, Vec2::new(-20.5, 31.8));
+        anchors.insert(5, Vec2::new(-42.6, 0.9));
+        anchors.insert(6, Vec2::new(-12.6, -32.9));
 
         let mut use_second_set = HashSet::new();
         use_second_set.insert((1, 2));
         // use_second_map.insert((2, 3));
         // use_second_set.insert((1, 3));
 
+        let mut defaulttags = HashMap::new();
+        // defaulttags.insert(
+        //     4,
+        //     TagState {
+        //         distances: HashMap::from([(5, Some(24.9)), (6, Some(21.97))]),
+        //         solutions: None,
+        //         estimated_position: None,
+        //         show_radii: true,
+        //         use_second_solution: false,
+        //     },
+        // );
+
         Self {
             anchors,
-            tagstates: HashMap::new(),
-            scale: 10.0,
-            bgscale: 0.05,
+            tagstates: defaulttags,
+            scale: 5.0,
+            bgscale: 0.251,
             use_second: use_second_set,
             show_extradebug: true,
             use_lut: false,
-            lut: vec![(0.0, 0.0), (10.0, 10.0)],
+            // lut: vec![(0.0, 0.0), (10.0, 10.0)],
+            lut: vec![
+                (11.0, 11.0),
+                (32.0, 32.0),
+                (39.92, 43.0),
+                (46.54, 57.55),
+                (56.0, 61.4),
+                (101., 107.),
+            ],
         }
+
+        // (0.0, 0.0),
+        // (11.0, 11.0),
+        // (32.0, 32.0),
+        // (39.92, 43.0),
+        // (46.54, 57.55),
+        // (56.0, 61.4),
+        // (101., 107.),
+
+        // lut: vec![
+        //                 (0.0, 0.0),
+        //                 (11.0, 11.0),
+        //                 (40.0, 40.0),
+        //                 (46.54, 57.55),
+        //                 (46.54, 57.55),
+        //                 (56.0, 61.4),
+        //                 (101., 101.),
+        //             ],
     }
 }
 
@@ -348,9 +391,11 @@ fn triangulation_ui(
             }
 
             // Keep it sorted by measured distance
-            state
-                .lut
-                .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            if ui.button("Sort").clicked() {
+                state
+                    .lut
+                    .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            }
         });
 
     egui::Window::new("Triangulation")
@@ -531,7 +576,7 @@ fn triangulation_ui(
                 ui.add(
                     egui::DragValue::new(&mut state.scale)
                         .speed(1.0)
-                        .range(10.0..=1000.0),
+                        .range(1.0..=100.0),
                 );
             });
 
@@ -569,9 +614,9 @@ fn triangulation_ui(
                     ui.label("scale:");
 
                     ui.add(egui::DragValue::new(&mut state.bgscale).speed(0.001));
-                    transform.scale.x = state.bgscale * state.scale;
-                    transform.scale.y = state.bgscale * state.scale;
-                    transform.scale.z = state.bgscale * state.scale;
+                    transform.scale.x = state.bgscale;
+                    transform.scale.y = state.bgscale;
+                    transform.scale.z = state.bgscale;
                 });
             }
         });
@@ -582,9 +627,15 @@ struct BackgroundImage; // Component for overlayed background image (map or satt
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
-        Sprite::from_image(asset_server.load("parking.png")),
+        // Sprite::from_image(asset_server.load("parking.png")),
+        Sprite::from_image(asset_server.load("plein.png")),
         BackgroundImage,
-        Transform::from_xyz(206., 120., 0.),
+        // Transform::from_xyz(206., 120., 0.), // gras 1
+        Transform::from_xyz(265.5, -20.45, 0.).with_scale(Vec3 {
+            x: 0.032,
+            y: 0.032,
+            z: 0.032,
+        }), // plein 1
     ));
 }
 
@@ -639,6 +690,8 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
             }
         }
 
+        let mut showpos = tagstate.estimated_position;
+
         // --- Solutions ---
         // For exactly 2 anchors we might have 2 exact solutions, dim one if we want
         if let Some((p1, p2)) = tagstate.solutions {
@@ -651,12 +704,16 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
                 (p1_screen, p2_screen)
             };
 
+            if tagstate.use_second_solution {
+                showpos = Some(p2_screen);
+            }
+
             // Dimmed alternate solution
             gizmos.circle_2d(other_screen, 5.0, Color::srgba(1.0, 1.0, 0.0, 0.25));
         }
 
         // for one solution (>=3 anchors in range)
-        if let Some(pos) = tagstate.estimated_position {
+        if let Some(pos) = showpos {
             let chosen_screen = pos * s;
             let hue = (((tag_id + 4) as f32) * 137.5) % 360.0;
             let color = Color::hsla(hue, 0.8, 0.5, 0.5);

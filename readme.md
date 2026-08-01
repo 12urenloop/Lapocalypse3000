@@ -31,6 +31,8 @@ Positioning server and visualization for data coming from UWB modules.
 ## code/controlserver
 For sending commands to anchors and tags to configure UWB modules in realtime (reading and writing registers and OTP. Receives metrics (like distance and rssi) and publishes them on MQTT.
 
+## code/aggregation
+Code for getting everything from anchor stations to the dashboard application over the network, this will need to be reworked in the future.
+
 # Project status
-### Demo video [here](https://mattermost.zeus.gent/files/a3uyukxq7fr3xgh8smr41m8c8y/public?h=9EqalStLvKMUJPbeFxvve5GTdjRCBi3U7PJmxrKU3Yg)
-### First outdoor test (bad coverage, worst case scenario): [Raw data video here](https://mattermost.zeus.gent/files/bj4pd1zdd7rg5xdo87kudsfhje/public?h=66uNqb_PoHTUd7TrrOXdnlIjC-n7Gycecf7ml2fecYE)
+### Demo video [here](https://mattermost.zeus.gent/files/jbebfiyzgfywbmozkod176t74o/public?h=5_E_HyTIOl5SYYzaZ5DUgd1leVyDLLcwy-zEMyZzVJ0)

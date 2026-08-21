@@ -1,0 +1,26 @@
+{
+    "parameterSets": {
+        "design default values": {
+            "base_thickness": "3",
+            "frame_border": "2",
+            "outer_corner_radius": "2",
+            "pcb_bottom_support": "0",
+            "pcb_clearance_x": "0.1",
+            "pcb_clearance_y": "0.1",
+            "pcb_corner_radius": "0",
+            "pcb_height": "25",
+            "pcb_offset_x": "0",
+            "pcb_offset_y": "0",
+            "pcb_pocket_depth": "1.6",
+            "pcb_thickness": "0",
+            "pcb_width": "42",
+            "stencil_clearance_x": "0.25",
+            "stencil_clearance_y": "0.25",
+            "stencil_height": "41",
+            "stencil_pocket_depth": "1.4",
+            "stencil_thickness": "0.15",
+            "stencil_width": "71"
+        }
+    },
+    "fileFormatVersion": "1"
+}

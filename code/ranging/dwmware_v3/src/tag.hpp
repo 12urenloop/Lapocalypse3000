@@ -2,7 +2,7 @@
 #include <uwb/SSTWR_responder.hpp>
 
 #define USEWIFI false
-#include <connectivity/debugserver.hpp>
+// #include <connectivity/debugserver.hpp>
 
 #define APP_NAME "SS TWR RESP v1.0"
 
@@ -25,7 +25,7 @@ void setup()
 
 void loop()
 {
-    debugserver_loop();
+    // debugserver_loop();
     uwb_responder.loop();
 }
 

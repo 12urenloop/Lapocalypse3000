@@ -17,10 +17,14 @@ const uint8_t PIN_SS = 4;   // spi select
 const uint8_t PIN_RST = 14; // reset pin
 const uint8_t PIN_IRQ = 12; // irq pin
 const uint8_t PIN_SS = 5; // spi select pin
+#elif BOARD==NRF_FEATHER
+const uint8_t PIN_RST = A2; // reset pin
+const uint8_t PIN_IRQ = 16; // irq pin
+const uint8_t PIN_SS = 15; // spi select pin
 #else
-const uint8_t PIN_RST = 27; // reset pin
-const uint8_t PIN_IRQ = 14; // irq pin
-const uint8_t PIN_SS = 4;   // spi select 
+const uint8_t PIN_RST = A2; // reset pin
+const uint8_t PIN_IRQ = 16; // irq pin
+const uint8_t PIN_SS = 15; // spi select pin
 #endif
 
 
@@ -99,7 +103,8 @@ class UWB_Common{
         spiBegin(PIN_IRQ, PIN_RST);
         spiSelect(PIN_SS);
 
-        delay(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
+        dwt_softreset();
+        delay(2);
 
         while (!dwt_checkidlerc()) // Need to make sure DW IC is in IDLE_RC before proceeding
         {

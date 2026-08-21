@@ -146,7 +146,11 @@ void sendData(int numtags, TagInfo taginfos[])
     ensureConnection();
 
     // Create JSON structure dynamically based on number of anchors
+    #ifdef ANCHOR_ID
     String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ",\"tags\":{";
+    #elifdef TAG_ID
+    String data = "{\"tag_id\":" + String(TAG_ID) + ",\"tags\":{";
+    #endif
 
     for (int i = 0; i < numtags; i++)
     {

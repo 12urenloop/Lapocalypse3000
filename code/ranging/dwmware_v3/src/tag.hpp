@@ -1,5 +1,6 @@
 #include <Arduino.h>
-#include <uwb/SSTWR_responder.hpp>
+#include <uwb/SSTWR_responder_uwbsync.hpp>
+// #include <uwb/SSTWR_responder.hpp>
 
 #define USEWIFI false
 // #include <connectivity/debugserver.hpp>
@@ -7,6 +8,10 @@
 #define APP_NAME "SS TWR RESP v1.0"
 
 SSTWR_Responder uwb_responder = SSTWR_Responder({standard_dwconfig, 0xA0 + TAG_ID});
+
+#ifndef INFOSTRING
+#define INFOSTRING "NODEVINFOSET"
+#endif
 
 void setup()
 {
@@ -23,9 +28,34 @@ void setup()
     Serial.println("entering loop");
 }
 
+static String serialBuffer = "";
+
+
 void loop()
 {
     // debugserver_loop();
+    
+    while (Serial.available()) {
+        char c = (char)Serial.read();
+        serialBuffer += c;
+        if (serialBuffer.length() > 64) serialBuffer = serialBuffer.substring(serialBuffer.length() - 64);
+        // Serial.println(serialBuffer);
+        
+        
+        if(c != '\n') continue;
+        bool commanded = true;
+        if(serialBuffer.indexOf("AT+GETINFO") != -1){
+            Serial.print("INFO=");
+            Serial.println(INFOSTRING);
+        }else{
+            commanded = false;
+        }
+        
+        if(commanded){
+            // serialBuffer.clear();
+        }
+    }
+    
     uwb_responder.loop();
 }
 

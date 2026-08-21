@@ -14,8 +14,8 @@
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
 // static uint8_t rx_poll_msg[] = {0x01, 0xA0 + TAG_ID, 0xE0, 0, 0};
-// layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes.
-static uint8_t tx_resp_msg[] = {0xA0 + TAG_ID, 0x01, 0xE1, 0, 0, 0, 0, 0, 0};
+// layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes, sync timestamp 4 bytes.
+static uint8_t tx_resp_msg[] = {0xA0 + TAG_ID, 0x01, 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 class SSTWR_Responder : UWB_Common
 {
@@ -28,6 +28,8 @@ public:
     /* Timestamps of frames transmission/reception. */
     uint64_t poll_rx_ts;
     uint64_t resp_tx_ts;
+    int64_t uwb_sync_offset = 0;
+
 
     SSTWR_Responder(UWB_Common::Config cconfig){
         UWB_Common::config = cconfig;
@@ -51,8 +53,14 @@ public:
         dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
         /* Poll for reception of a frame or error/timeout. See NOTE 6 below. */
+        long iters = 0;
+        unsigned long startms = millis();
         while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR)))
         { 
+            if(iters % 100 == 0 && millis() - startms >= 1000){
+                break;
+            }
+            iters ++;
         };
 
         if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
@@ -72,7 +80,7 @@ public:
 
                 /* Check that the frame is a poll sent by "SS TWR initiator" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                rx_buffer[ALL_MSG_SN_IDX] = 0;
+                // rx_buffer[ALL_MSG_SN_IDX] = 0;
                 // if (memcmp(rx_buffer + 1, rx_poll_msg + 1, ALL_MSG_COMMON_LEN - 1) == 0)
                 if (rx_buffer[1] == config.address) // if destination is our address
                 {
@@ -95,7 +103,9 @@ public:
                     /* Write all timestamps in the final message. See NOTE 8 below. */
                     // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_POLL_RX_TS_IDX], poll_rx_ts);
                     // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], resp_tx_ts);
-                    resp_msg_set_ts(&tx_resp_msg[RES_MSG_DELAY_IDX], resptime);
+                    resp_msg_set_ts(&tx_resp_msg[RES_MSG_DELAY_IDX], (uint32_t)resptime);
+                    resp_msg_set_ts(&tx_resp_msg[RESP_SYSTS_IDX], (uint32_t)(resp_tx_time + uwb_sync_offset));
+                    // resp_msg_set_ts(&tx_resp_msg[RESP_SYSTS_IDX], (uint32_t)0xF0F0);
 
                     /* Write and send the response message. See NOTE 9 below. */
                     // tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
@@ -120,6 +130,26 @@ public:
                         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
                         frame_seq_nb++;
                     }
+
+                    //syncing
+                    uint32_t resp_systs;
+                    resp_msg_get_ts(&rx_buffer[POLL_SYSTS_IDX], &resp_systs);
+                    uint32_t rxsystime = dwt_readrxtimestamphi32();
+                    uint32_t systime = dwt_readsystimestamphi32();
+                    uint32_t synctime = rxsystime + uwb_sync_offset;
+                    // Serial.print("sent: "); Serial.println((resp_tx_time + uwb_sync_offset) / MS_TO_DWT_TIME, HEX);
+                    Serial.print("resp_systs: "); Serial.print(resp_systs / MS_TO_DWT_TIME, HEX); Serial.print(" synctime: "); Serial.println(synctime / MS_TO_DWT_TIME);
+                    Serial.print("systime: "); Serial.print(systime / MS_TO_DWT_TIME);
+                    Serial.print("rx_buffer: ");
+                    // for (int i = 0; i < frame_len; i++) {
+                    //     Serial.print(rx_buffer[i], HEX);
+                    //     Serial.print(" ");
+                    // }
+                    if(resp_systs > synctime){
+                        uwb_sync_offset = resp_systs - rxsystime;
+                        // Serial.print("UPDATE uwb_sync_offset: "); Serial.println(uwb_sync_offset / MS_TO_DWT_TIME);
+                    }
+
                 }else{
                     Serial.println("no match");
                     Serial.print("rx_buffer: ");
@@ -141,6 +171,5 @@ public:
             /* Clear RX error events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
         }
-        Serial.println("loop done");
     }
 };

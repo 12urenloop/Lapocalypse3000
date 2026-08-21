@@ -1,0 +1,39 @@
+{
+    "id_to_config":{
+        "UNO1":{
+            "pioenv": "wemostag",
+            "tagid": 1,
+            "uwbchip": "DWM3000",
+            "mcu": "ESP32_WROOM",
+            "board": "WEMOS D1 R32"
+        },
+        "UNO2":{
+            "pioenv": "wemostag",
+            "tagid": 2,
+            "uwbchip": "DWM3000",
+            "mcu": "ESP32_WROOM",
+            "board": "WEMOS D1 R32"
+        },
+        "NODEVINFOSET":{
+            "pioenv": "wemostag01",
+            "tagid": 2,
+            "uwbchip": "DWM3000",
+            "mcu": "ESP32_WROOM",
+            "board": "WEMOS D1 R32"
+        },
+        "SOL1":{
+            "pioenv": "upesyanchor",
+            "anchorid": 2,
+            "uwbchip": "DWM3000",
+            "mcu": "ESP32_WROOM",
+            "board": "UPESY"
+        },
+        "FEATHER1":{
+            "pioenv": "adafruit_feather_nrf52832",
+            "anchorid": 3,
+            "uwbchip": "DWM3000",
+            "mcu": "NRF52",
+            "board": "FEATHER"
+        }
+    }
+}

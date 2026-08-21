@@ -1,7 +1,12 @@
 #pragma once
 
 #include <Dw3000/src/dw3000.h>
+// #include <Dw3000/src/dw3000.h>
 #include <boards.hpp>
+#include <Arduino.h>
+
+
+#define MS_TO_DWT_TIME 249601 //249 600.639
 
 #define N_TAGS 2
 #define ANCHORBROADCAST 0xFF // broadcast address
@@ -22,9 +27,9 @@ const uint8_t PIN_RST = A2; // reset pin
 const uint8_t PIN_IRQ = 16; // irq pin
 const uint8_t PIN_SS = 15; // spi select pin
 #else
-const uint8_t PIN_RST = A2; // reset pin
-const uint8_t PIN_IRQ = 16; // irq pin
-const uint8_t PIN_SS = 15; // spi select pin
+const uint8_t PIN_RST = 27; // reset pin
+const uint8_t PIN_IRQ = 14; // irq pin
+const uint8_t PIN_SS = 4;   // spi select 
 #endif
 
 
@@ -48,6 +53,8 @@ const uint8_t PIN_SS = 15; // spi select pin
 #define RES_MSG_DELAY_IDX 3
 #define RESP_MSG_TS_LEN 4
 #define POLL_TX_TO_RESP_RX_DLY_UUS 240
+#define POLL_SYSTS_IDX 5
+#define RESP_SYSTS_IDX 9
 
 /* Frame sequence number, incremented after each transmission. */
 uint8_t frame_seq_nb = 0;
@@ -64,7 +71,7 @@ extern dwt_txconfig_t txconfig_options;
 
 /* Buffer to store received response message.
  * Its size is adjusted to longest frame that this example code is supposed to handle. */
-#define RX_BUF_LEN 12
+#define RX_BUF_LEN 16
 uint8_t rx_buffer[RX_BUF_LEN];
 
 /* Default communication configuration. We use default non-STS DW mode. */
@@ -100,11 +107,11 @@ class UWB_Common{
     void setup(){
          /* Configure SPI rate, DW3000 supports up to 38 MHz */
         /* Reset DW IC */
+        // SPI.begin();
         spiBegin(PIN_IRQ, PIN_RST);
         spiSelect(PIN_SS);
 
-        dwt_softreset();
-        delay(2);
+        delay(2); // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
         while (!dwt_checkidlerc()) // Need to make sure DW IC is in IDLE_RC before proceeding
         {

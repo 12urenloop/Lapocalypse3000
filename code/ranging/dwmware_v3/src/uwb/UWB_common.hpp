@@ -138,6 +138,21 @@ class UWB_Common{
                 ;
         }
 
+        Serial.print("XTRIM OTP: ");
+        uint32_t otpread[1] = {0xABABABAB};
+        dwt_otpread(0x1E, otpread, 1);
+        Serial.println(otpread[0], HEX);
+
+        uint32_t otpadr = 0x0;
+        while(otpadr <= 0x7F){
+            Serial.print(otpadr, HEX);
+            Serial.print(" = ");
+            dwt_otpread(otpadr, otpread, 1);
+            Serial.println(otpread[0], HEX);
+
+            otpadr += 1;
+        }
+
         /* Configure the TX spectrum parameters (power, PG delay and PG count) */
         dwt_configuretxrf(&txconfig_options);
 

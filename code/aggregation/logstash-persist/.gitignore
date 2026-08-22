@@ -1,0 +1,12 @@
+# Environment
+.env
+.env.local
+
+# Local output data
+data/
+
+# Logs
+*.log
+
+# Editor / OS
+.DS_Store

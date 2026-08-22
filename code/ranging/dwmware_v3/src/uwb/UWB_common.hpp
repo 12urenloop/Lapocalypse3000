@@ -8,6 +8,8 @@
 
 #define MS_TO_DWT_TIME 249601 //249 600.639
 
+#define MS_TO_DWT_TIME 249601 //249 600.639
+
 #define N_TAGS 2
 #define ANCHORBROADCAST 0xFF // broadcast address
 

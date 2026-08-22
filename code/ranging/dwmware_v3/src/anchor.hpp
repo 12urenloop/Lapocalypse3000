@@ -6,7 +6,7 @@
 #include <connectivity/mqtt_reporter.hpp>
 #include <connectivity/debugserver.hpp>
 #include <types/taginfo.hpp>
-#include <uwb/SSTWR_initiator.hpp>
+#include <uwb/SSTWR_initiator_uwbsync.hpp>
 
 #define APP_NAME "SS TWR INIT v1.0"
 
@@ -34,7 +34,7 @@ void setup()
 
     UWBInitiator.setup();
 
-    meshClock.begin();
+    // meshClock.begin();
     mqtt_setup();
 }
 
@@ -48,78 +48,37 @@ uint64_t lastReceive = 0;
 
 unsigned long lastreport = 0;
 
-void checkforMark() {
-  static String line = "";
-
-  while (Serial.available()) {
-    char c = Serial.read();
-
-    // End of line detected
-    if (c == '\n') {
-      line.trim();  // Remove whitespace and \r
-
-      if (line.startsWith("MARK ")) {
-        uint32_t markid;
-        uint32_t unixts;
-
-        // Parse using sscanf
-        if (sscanf(line.c_str(), "MARK %lu %lu", &markid, &unixts) == 2) {
-          UWBInitiator.sendMarker((uint8_t)markid, unixts);
-        }
-      }
-
-      line = "";  // Clear for next line
-    } else {
-      line += c;
-    }
-  }
-}
+bool uwbOn = true;
 
 void loop()
 {
-    mqtt_loop();
-    debugserver_loop();
+    // mqtt_loop();
+    // debugserver_loop();
 
-    // IMPORTANT: Call this regularly to handle broadcasts
-    meshClock.loop();
+    if(uwbOn){
+        UWBInitiator.slotted_loop();
+    }else{
+        delay(1000);
+        Serial.println("send RESET to turn on UWB");
+    }
 
-    // Monitor and display sync state changes
-    SyncState currentState = meshClock.getSyncState();
-
-    if (currentState != lastState)
     {
-        lastState = currentState;
-        uint32_t rxled;
-        if(UWBInitiator.workingReceive){
-            rxled = 0b001;
-        }else{
-            rxled = 0b000;
-        }
-
-        Serial.print(">>> State Change: ");
-        switch (currentState)
-        {
-        case SyncState::ALONE:
-            Serial.println("ALONE - Waiting for first sync message...");
-            // disable TX led (RED)
-            dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b000 << 9) | (rxled << 6) | (0b001 << 3) | (0b001 << 0));
-            break;
-        case SyncState::SYNCED:
-            Serial.println("SYNCED - Successfully synchronized with mesh!");
-            // enable TX led (RED)
-            dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (rxled << 6) | (0b001 << 3) | (0b001 << 0));
-            break;
-        case SyncState::LOST:
-            Serial.println("LOST - No sync messages received recently!");
-            // disable TX led (RED)
-            dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b000 << 9) | (rxled << 6) | (0b001 << 3) | (0b001 << 0));
-            break;
+        static String serialBuffer = "";
+        while (Serial.available()) {
+            char c = (char)Serial.read();
+            serialBuffer += c;
+            if (serialBuffer.length() > 64) serialBuffer = serialBuffer.substring(serialBuffer.length() - 64);
+            if (serialBuffer.indexOf("RESET") != -1) {
+                serialBuffer = "";
+                ESP.restart();
+            }
+            else if (serialBuffer.indexOf("OFF") != -1) {
+                uwbOn = false;
+                Serial.println("UWB OFF");
+            }
         }
     }
 
-    UWBInitiator.slotted_loop();
-
-    checkforMark();
 
     unsigned long ms = millis();
     if (ms - lastreport > 200)

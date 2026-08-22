@@ -1,4 +1,6 @@
+use crate::ffmpeg::{VideoPlayer, VideoResource, make_video};
 use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind};
+use bevy::render::render_resource::TextureFormat;
 use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use std::fs::File;
@@ -17,9 +19,14 @@ impl Plugin for LogDistanceProviderPlugin {
     }
 }
 
+// marker component for sprite displaying video frames
+#[derive(Component)]
+pub struct VideoSprite {}
+
 #[derive(Resource)]
 pub struct LogPlaybackState {
     pub recording_name: String,
+    pub video_name: String,
     pub is_playing: bool,
     pub current_time_ms: u64,
     pub measurements: Vec<LogMeasurement>,
@@ -33,6 +40,7 @@ impl Default for LogPlaybackState {
     fn default() -> Self {
         Self {
             recording_name: "exp2".to_string(),
+            video_name: "./assets/gras1.mp4".to_string(),
             is_playing: false,
             current_time_ms: 0,
             measurements: Vec::new(),
@@ -52,15 +60,28 @@ pub struct LogMeasurement {
     pub timestamp_ms: u64,
 }
 
-fn setup_log_provider(mut provider: ResMut<ActiveDistanceProvider>) {
+fn setup_log_provider(
+    mut provider: ResMut<ActiveDistanceProvider>,
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+) {
     provider.available.push(DistanceProviderKind::LogFiles);
+    let image = Image::new_target_texture(
+        1920,
+        1080,
+        TextureFormat::Rgba8Unorm,
+        Some(TextureFormat::Rgba8UnormSrgb),
+    );
+
+    let image_handle = images.add(image);
+    commands.spawn((Sprite::from_image(image_handle), VideoSprite {}));
 }
 
 fn log_playback_system(
     time: Res<Time>,
     mut state: ResMut<LogPlaybackState>,
     provider: Res<ActiveDistanceProvider>,
-    mut events: EventWriter<DistanceMeasurement>,
+    mut events: MessageWriter<DistanceMeasurement>,
     mut previous_state: Local<HashMap<(usize, usize), Option<(u64, f32)>>>,
 ) {
     if provider.kind != DistanceProviderKind::LogFiles {
@@ -134,6 +155,10 @@ fn log_playback_ui(
     mut contexts: EguiContexts,
     mut state: ResMut<LogPlaybackState>,
     provider: Res<ActiveDistanceProvider>,
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    video_resource: NonSendMut<VideoResource>,
+    mut videosprite: Query<(Entity, &mut Transform, &mut Sprite), With<VideoSprite>>,
 ) {
     if provider.kind != DistanceProviderKind::LogFiles {
         return;
@@ -147,9 +172,23 @@ fn log_playback_ui(
         ui.horizontal(|ui| {
             ui.label("Recording Name:");
             ui.text_edit_singleline(&mut state.recording_name);
+            ui.label("Video Name:");
+            ui.text_edit_singleline(&mut state.video_name);
             if ui.button("Load").clicked() {
                 let measurements = load_logs(&state.recording_name);
                 let max_time = measurements.last().map(|m| m.timestamp_ms).unwrap_or(0);
+
+                let videoplayer = make_video(
+                    &state.video_name,
+                    videosprite.single().unwrap().2.image.clone(),
+                    video_resource,
+                    videosprite.single().unwrap().0,
+                );
+
+                commands
+                    .entity(videosprite.single().unwrap().0)
+                    .insert(videoplayer);
+
                 state.measurements = measurements;
                 state.max_time_ms = max_time;
                 state.current_time_ms = 0;
@@ -161,6 +200,81 @@ fn log_playback_ui(
 
         ui.separator();
 
+        if let Ok((entity, mut transform, _)) = videosprite.single_mut() {
+            ui.separator();
+            ui.label("Video Sprite Transform");
+
+            let mut position = transform.translation;
+            let (mut rot_x, mut rot_y, mut rot_z) = transform.rotation.to_euler(EulerRot::XYZ);
+            let mut scale = transform.scale;
+
+            let mut changed = false;
+
+            ui.collapsing("Position", |ui| {
+                changed |= ui
+                    .add(
+                        egui::DragValue::new(&mut position.x)
+                            .speed(0.01)
+                            .prefix("x: "),
+                    )
+                    .changed();
+                changed |= ui
+                    .add(
+                        egui::DragValue::new(&mut position.y)
+                            .speed(0.01)
+                            .prefix("y: "),
+                    )
+                    .changed();
+                changed |= ui
+                    .add(
+                        egui::DragValue::new(&mut position.z)
+                            .speed(0.01)
+                            .prefix("z: "),
+                    )
+                    .changed();
+            });
+
+            ui.collapsing("Rotation (degrees)", |ui| {
+                let mut deg_x = rot_x.to_degrees();
+                let mut deg_y = rot_y.to_degrees();
+                let mut deg_z = rot_z.to_degrees();
+
+                let cx = ui
+                    .add(egui::DragValue::new(&mut deg_x).speed(0.5).prefix("x: "))
+                    .changed();
+                let cy = ui
+                    .add(egui::DragValue::new(&mut deg_y).speed(0.5).prefix("y: "))
+                    .changed();
+                let cz = ui
+                    .add(egui::DragValue::new(&mut deg_z).speed(0.5).prefix("z: "))
+                    .changed();
+
+                if cx || cy || cz {
+                    rot_x = deg_x.to_radians();
+                    rot_y = deg_y.to_radians();
+                    rot_z = deg_z.to_radians();
+                    changed = true;
+                }
+            });
+
+            ui.collapsing("Scale", |ui| {
+                changed |= ui
+                    .add(egui::DragValue::new(&mut scale.x).speed(0.01).prefix("x: "))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut scale.y).speed(0.01).prefix("y: "))
+                    .changed();
+                changed |= ui
+                    .add(egui::DragValue::new(&mut scale.z).speed(0.01).prefix("z: "))
+                    .changed();
+            });
+
+            if changed {
+                transform.translation = position;
+                transform.rotation = Quat::from_euler(EulerRot::XYZ, rot_x, rot_y, rot_z);
+                transform.scale = scale;
+            }
+        }
         if state.measurements.is_empty() {
             ui.label("No data loaded.");
             return;

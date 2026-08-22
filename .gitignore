@@ -3,3 +3,8 @@ proprietary
 code/ESP32-DWM3000-UWB-Indoor-RTLS-Tracker
 wificonfig.h
 old
+code/dashboard/data
+code/scripts/markname.txt
+code/scripts/mark_log.txt
+code/scripts/mark_id
+code/dashboard/assets/*.mp4

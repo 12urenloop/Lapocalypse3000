@@ -1,19 +1,17 @@
-#define USEWIFI false
+#define USEWIFI true
 #define UWB_DEBUG true
 
 #include <Arduino.h>
-#include <ESPNowMeshClock.h>
 #include <connectivity/mqtt_reporter.hpp>
-#include <connectivity/debugserver.hpp>
+// #include <connectivity/debugserver.hpp>
 #include <types/taginfo.hpp>
 #include <uwb/SSTWR_initiator_uwbsync.hpp>
 
 #define APP_NAME "SS TWR INIT v1.0"
 
-ESPNowMeshClock meshClock;
 
 SSTWR_Initiator::Config anchorconfig = {
-        50, 16, meshClock, true
+        50, 16, true
     };
 
 SSTWR_Initiator UWBInitiator = 
@@ -39,7 +37,6 @@ void setup()
 }
 
 
-static SyncState lastState = SyncState::ALONE;
 
 
 bool workingReceive = false; // received a valid packet yet?
@@ -52,7 +49,7 @@ bool uwbOn = true;
 
 void loop()
 {
-    // mqtt_loop();
+    mqtt_loop();
     // debugserver_loop();
 
     if(uwbOn){

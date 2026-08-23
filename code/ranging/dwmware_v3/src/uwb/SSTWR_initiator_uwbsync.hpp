@@ -1,6 +1,5 @@
 #pragma once
 #include <uwb/UWB_common.hpp>
-#include <ESPNowMeshClock.h>
 #include <env/anchorconfig.hpp>
 #include <env/tagconfig.hpp>
 
@@ -33,7 +32,6 @@ public:
     {
         uint32_t slotIntervalMS;
         uint32_t slotOffsetMS;
-        ESPNowMeshClock &meshClock;
         bool enable_marks;
     };
     uint32_t mySlotOffsetMS;
@@ -256,7 +254,7 @@ public:
                 Serial.print(" ");
                 Serial.print(target_tag_ix);
                 Serial.print(" ");
-                Serial.println(anchorConfig.meshClock.meshMillis());
+                // Serial.println(anchorConfig.meshClock.meshMillis()); //TODO add UWB mesh millis
             }
         }
         else
@@ -267,7 +265,7 @@ public:
                 Serial.print(" ");
                 Serial.print(target_tag_ix);
                 Serial.print(" ");
-                Serial.println(anchorConfig.meshClock.meshMillis());
+                // Serial.println(anchorConfig.meshClock.meshMillis()); //TODO add UWB mesh millis
             }
             /* Clear RX error/timeout events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);

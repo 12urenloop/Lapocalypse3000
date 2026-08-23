@@ -85,6 +85,8 @@ fn setup_mqtt_connection(
     config: Res<MqttDistanceProviderConfig>,
     mut provider: ResMut<ActiveDistanceProvider>,
 ) {
+    println!("starting MQTT");
+
     // Register ourselves in the provider list so the UI shows "MQTT".
     if !provider.available.contains(&DistanceProviderKind::Mqtt) {
         provider.available.push(DistanceProviderKind::Mqtt);
@@ -105,7 +107,9 @@ fn setup_mqtt_connection(
         for notification in connection.iter() {
             if let Ok(Event::Incoming(Packet::Publish(publish))) = notification {
                 if let Ok(text) = std::str::from_utf8(&publish.payload) {
+                    println!("got msg");
                     if let Ok(payload) = serde_json::from_str::<MqttDistancePayload>(text) {
+                        println!("parsed");
                         if let Ok(mut buf) = payloads_clone.lock() {
                             buf.push(payload);
                         }
@@ -116,6 +120,8 @@ fn setup_mqtt_connection(
     });
 
     commands.insert_resource(MqttDistanceReceiver { payloads });
+
+    println!("MQTT ok");
 }
 
 /// Drains the shared buffer and emits [`DistanceMeasurement`] events.
@@ -141,7 +147,7 @@ fn forward_mqtt_to_events(
                 events.write(DistanceMeasurement {
                     anchor_id: payload.anchor_id,
                     tag_id: payload.tag_id,
-                    distance: Some(payload.distance / 100.0),
+                    distance: Some(payload.distance),
                 });
             }
         }

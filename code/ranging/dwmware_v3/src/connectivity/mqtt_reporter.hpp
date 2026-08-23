@@ -64,24 +64,29 @@ void sendData(byte* anchorIds, double* distances)
       // Create JSON structure dynamically based on number of anchors
       // String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ",\"tag_id\":" + String(taginfo.tagID) + ",\"distance\":" + String(taginfo.distance * 100.0, 2) + "}";
   
-      String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ", \"tags\":{";
+      // String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ", \"tags\":{";
 
-        for(int i = 0; i < N_TAGS; i++){
-          data += "\"" + String(anchorIds[i]) + "\":{";
-            data += "\"distance\":" + String(distances[i]);
-          data += "}";
-        }
+      //   for(int i = 0; i < N_TAGS; i++){
+      //     data += "\"" + String(anchorIds[i]) + "\":{";
+      //       data += "\"distance\":" + String(distances[i]);
+      //     data += "}";
+      //   }
 
-      data += "}";
+      // data += "}";
 
-      if(USEWIFI) mqttclient.publish("uwb/anchormsg/test", data.c_str());
+      for(int i = 0; i < N_TAGS; i++){
+        String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ", \"tag_id\":" + String(i + 1) + ", \"distance\":" + String(distances[i]) + "}";  
+        if(USEWIFI) mqttclient.publish("uwb/anchormsg/test", data.c_str());
+        Serial.print(millis());
+        Serial.print(": ");
+        Serial.println(data);
+      }
+
+      // if(USEWIFI) mqttclient.publish("uwb/anchormsg/test", data.c_str());
       // if(USEWIFI) client.print(data);
   
       // For debugging, print the JSON to serial
       // Serial.println("Sent JSON data:");
-      Serial.print(millis());
-      Serial.print(": ");
-      Serial.println(data);
     }
 }
 

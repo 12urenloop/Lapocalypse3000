@@ -1,14 +1,14 @@
 {
     "id_to_config":{
-        "UNO1":{
-            "pioenv": "wemostag",
+        "wemosanchor01":{
+            "pioenv": "wemosanchor01",
             "tagid": 1,
             "uwbchip": "DWM3000",
             "mcu": "ESP32_WROOM",
             "board": "WEMOS D1 R32"
         },
-        "UNO2":{
-            "pioenv": "wemostag",
+        "wemosanchor02":{
+            "pioenv": "wemosanchor02",
             "tagid": 2,
             "uwbchip": "DWM3000",
             "mcu": "ESP32_WROOM",

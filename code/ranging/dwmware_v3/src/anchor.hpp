@@ -46,6 +46,7 @@ uint64_t lastReceive = 0;
 unsigned long lastreport = 0;
 
 bool uwbOn = true;
+static String serialBuffer = "";
 
 void loop()
 {
@@ -59,33 +60,37 @@ void loop()
         Serial.println("send RESET to turn on UWB");
     }
 
-    {
-        static String serialBuffer = "";
-        while (Serial.available()) {
-            char c = (char)Serial.read();
-            serialBuffer += c;
-            if (serialBuffer.length() > 64) serialBuffer = serialBuffer.substring(serialBuffer.length() - 64);
-            if (serialBuffer.indexOf("RESET") != -1) {
-                serialBuffer = "";
-                ESP.restart();
-            }
-            else if (serialBuffer.indexOf("OFF") != -1) {
-                uwbOn = false;
-                Serial.println("UWB OFF");
-            }
+    while (Serial.available()) {
+        char c = (char)Serial.read();
+        serialBuffer += c;
+        if (serialBuffer.length() > 64) serialBuffer = serialBuffer.substring(serialBuffer.length() - 64);
+        // Serial.println(serialBuffer);
+        
+        
+        if(c != '\n') continue;
+        bool commanded = true;
+        if(serialBuffer.indexOf("AT+GETINFO") != -1){
+            Serial.println("");
+            Serial.print("INFO=");
+            Serial.println(INFOSTRING);
+        }else{
+            commanded = false;
+        }
+        
+        if(commanded){
+            // serialBuffer.clear();
         }
     }
 
 
     unsigned long ms = millis();
-    if (ms - lastreport > 200)
+    if (ms - lastreport >= 195)
     {
-        lastreport = ms;
-
-        for (int i = 0; i < N_TAGS; i++)
-        {
-            sendData(UWBInitiator.tagIDs, UWBInitiator.distances);
-        }
+        delay(20);
+        sendData(UWBInitiator.tagIDs, UWBInitiator.distances);
+        Serial.print("report delta = ");
+        Serial.println(millis() - lastreport);
+        lastreport = millis();
     }
 
     /* Execute a delay between ranging exchanges. */

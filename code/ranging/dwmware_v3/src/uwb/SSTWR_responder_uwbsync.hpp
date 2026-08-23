@@ -9,13 +9,21 @@
 #define RESP_RX_TIMEOUT_UUS 400
 #define POLL_RX_TO_RESP_TX_DLY_UUS 7
 
+#define TARGET_XTAL_OFFSET_VALUE_PPM_MIN (2.0f)
+#define TARGET_XTAL_OFFSET_VALUE_PPM_MAX (4.0f)
 
+/* The FS_XTALT_MAX_VAL defined the maximum value of the trimming value */
+#define FS_XTALT_MAX_VAL (XTAL_TRIM_BIT_MASK)
+
+/* The typical trimming range (with 4.7pF external caps is ~77ppm (-65ppm to +12ppm) over all steps, see DW3000 Datasheet */
+#define AVG_TRIM_PER_PPM ((FS_XTALT_MAX_VAL + 1) / 77.0f)
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
 // static uint8_t rx_poll_msg[] = {0x01, 0xA0 + TAG_ID, 0xE0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes, sync timestamp 4 bytes.
 static uint8_t tx_resp_msg[] = {0xA0 + TAG_ID, 0x01, 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+// static uint8_t uCurrentTrim_val;
 
 class SSTWR_Responder : UWB_Common
 {
@@ -29,6 +37,9 @@ public:
     uint64_t poll_rx_ts;
     uint64_t resp_tx_ts;
     int64_t uwb_sync_offset = 0;
+    float trim_calc_val, offset_ppm_calc_val;
+
+    
 
 
     SSTWR_Responder(UWB_Common::Config cconfig){
@@ -42,6 +53,14 @@ public:
 
         // enable all leds
         dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b001 << 6) | (0b001 << 3) | (0b001 << 0));
+        
+        /* Read the initial crystal trimming value. This needs to be done after dwt_initialise(), which sets up initial trimming code.*/
+        dwt_setxtaltrim(XTALTRIM);
+        // uCurrentTrim_val = dwt_getxtaltrim();
+        // trim_calc_val = (TARGET_XTAL_OFFSET_VALUE_PPM_MAX + TARGET_XTAL_OFFSET_VALUE_PPM_MIN) / 2;
+        // offset_ppm_calc_val = CLOCK_OFFSET_PPM_TO_RATIO * 1e6;
+
+
     }
 
     void loop(){
@@ -115,7 +134,31 @@ public:
                     ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
                     // UART_puts("SENDING\r\n");
 
-                    Serial.print("ret="); Serial.println(ret);
+                    // float xtalOffset_ppm;
+                    // {
+
+                    //     /* Now we read the carrier frequency offset of the remote transmitter, and convert to Parts Per Million units (ppm).
+                    //     * A positive value means the local RX clock is running faster than the remote transmitter's clock.
+                    //     * For a valid result the clock offset should be read before the receiver is re-enabled.
+                    //     */
+                    //     xtalOffset_ppm = ((float)dwt_readclockoffset()) * offset_ppm_calc_val;
+
+                    //     /* TESTING BREAKPOINT LOCATION #1 */
+
+                    //     /* Example of crystal trimming to be in the range
+                    //     * (TARGET_XTAL_OFFSET_VALUE_PPM_MIN..TARGET_XTAL_OFFSET_VALUE_PPM_MAX) out of the transmitter's crystal frequency.
+                    //     * This may be used in application, which require small offset to be present between ranging sides.
+                    //     * */
+                    //     if ((float)fabs(xtalOffset_ppm) > TARGET_XTAL_OFFSET_VALUE_PPM_MAX || (float)fabs(xtalOffset_ppm) < TARGET_XTAL_OFFSET_VALUE_PPM_MIN)
+                    //     {
+                    //         uCurrentTrim_val -= (int8_t)((trim_calc_val + xtalOffset_ppm) * AVG_TRIM_PER_PPM);
+                    //         uCurrentTrim_val &= FS_XTALT_MAX_VAL;
+
+                    //         /* Configure new Crystal Offset value */
+                    //         // dwt_setxtaltrim(uCurrentTrim_val);
+                    //     }
+                    // }
+
                     /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 10 below. */
                     if (ret == DWT_SUCCESS)
                     {
@@ -123,13 +166,16 @@ public:
                         /* Poll DW IC until TX frame sent event set. See NOTE 6 below. */
                         while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
                         { };
-
+                        
                         /* Clear TXFRS event. */
                         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
-
+                        
                         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
                         frame_seq_nb++;
                     }
+                    Serial.print("ret="); Serial.println(ret);
+                    // Serial.print("xtal="); Serial.println(xtalOffset_ppm);
+                    // Serial.print("trim="); Serial.println(uCurrentTrim_val);
 
                     //syncing
                     uint32_t resp_systs;
@@ -149,6 +195,8 @@ public:
                         uwb_sync_offset = resp_systs - rxsystime;
                         // Serial.print("UPDATE uwb_sync_offset: "); Serial.println(uwb_sync_offset / MS_TO_DWT_TIME);
                     }
+
+                    
 
                 }else{
                     Serial.println("no match");

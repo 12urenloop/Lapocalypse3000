@@ -41,6 +41,9 @@ void setup_wifi() {
     Serial.print(".");
   }
 
+  WiFi.setSleep(false);
+  client.setNoDelay(true);
+
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
@@ -76,7 +79,11 @@ void sendData(byte* anchorIds, double* distances)
 
       for(int i = 0; i < N_TAGS; i++){
         String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ", \"tag_id\":" + String(i + 1) + ", \"distance\":" + String(distances[i]) + "}";  
-        if(USEWIFI) mqttclient.publish("uwb/anchormsg/test", data.c_str());
+        const bool ok = mqttclient.publish("uwb/anchormsg/test", data.c_str());
+        if (!ok) {
+          Serial.printf("MQTT publish failed; state=%d wifi=%d rssi=%d\n",
+                        mqttclient.state(), WiFi.status(), WiFi.RSSI());
+        }
         Serial.print(millis());
         Serial.print(": ");
         Serial.println(data);

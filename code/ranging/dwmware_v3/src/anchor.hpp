@@ -2,7 +2,8 @@
 #define UWB_DEBUG true
 
 #include <Arduino.h>
-#include <connectivity/mqtt_reporter.hpp>
+#include <connectivity/udp_reporter.hpp>
+// #include <connectivity/mqtt_reporter.hpp>
 // #include <connectivity/debugserver.hpp>
 #include <types/taginfo.hpp>
 #include <uwb/SSTWR_initiator_uwbsync.hpp>
@@ -33,7 +34,8 @@ void setup()
     UWBInitiator.setup();
 
     // meshClock.begin();
-    mqtt_setup();
+    // mqtt_setup();
+    udp_setup();
 }
 
 
@@ -50,7 +52,7 @@ static String serialBuffer = "";
 
 void loop()
 {
-    mqtt_loop();
+    // mqtt_loop();
     // debugserver_loop();
 
     if(uwbOn){
@@ -84,9 +86,9 @@ void loop()
 
 
     unsigned long ms = millis();
-    if (ms - lastreport >= 195)
+    if (ms - lastreport >= 175)
     {
-        delay(20);
+        delay(ANCHOR_ID * 5);
         sendData(UWBInitiator.tagIDs, UWBInitiator.distances);
         Serial.print("report delta = ");
         Serial.println(millis() - lastreport);

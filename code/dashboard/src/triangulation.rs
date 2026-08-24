@@ -31,6 +31,7 @@ pub enum DistanceProviderKind {
     Amqp,
     LogFiles,
     Simulated,
+    Udp,
 }
 
 impl std::fmt::Display for DistanceProviderKind {
@@ -41,6 +42,7 @@ impl std::fmt::Display for DistanceProviderKind {
             Self::Amqp => write!(f, "AMQP"),
             Self::LogFiles => write!(f, "Log Files"),
             Self::Simulated => write!(f, "Simulated"),
+            Self::Udp => write!(f, "UDP"),
         }
     }
 }

@@ -101,9 +101,12 @@ fn setup_amqp_publisher(mut commands: Commands, config: Res<AmqpPositionPublishe
                 }
             };
 
+            let ex2 = cfg.exchange.clone();
+            let ex3 = cfg.exchange.clone();
+
             if let Err(err) = channel
                 .exchange_declare(
-                    &cfg.exchange,
+                    cfg.exchange.into(),
                     ExchangeKind::Topic,
                     ExchangeDeclareOptions {
                         durable: false,
@@ -119,7 +122,7 @@ fn setup_amqp_publisher(mut commands: Commands, config: Res<AmqpPositionPublishe
 
             eprintln!(
                 "[AMQP Publisher] ready to publish to exchange '{}'",
-                cfg.exchange
+                ex2
             );
 
             while let Some(msg) = rx.recv().await {
@@ -134,8 +137,8 @@ fn setup_amqp_publisher(mut commands: Commands, config: Res<AmqpPositionPublishe
                 if let Ok(json) = serde_json::to_vec(&payload) {
                     let _ = channel
                         .basic_publish(
-                            &cfg.exchange,
-                            &routing_key,
+                            ex3.clone().into(),
+                            routing_key.into(),
                             BasicPublishOptions::default(),
                             &json,
                             BasicProperties::default(),

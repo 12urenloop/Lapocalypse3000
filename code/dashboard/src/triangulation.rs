@@ -1,3 +1,5 @@
+#![feature(default_field_values)]
+
 use std::{collections::HashSet, time::Duration};
 
 use crate::rate_monitor::RateMonitor;
@@ -16,6 +18,7 @@ pub struct DistanceMeasurement {
     pub anchor_id: usize,
     pub tag_id: usize,
     pub distance: Option<f32>,
+    pub timestamp: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -98,14 +101,17 @@ impl Plugin for TriangulationPlugin {
 // ---------------------------------------------------------------------------
 // Triangulation state
 // ---------------------------------------------------------------------------
-
+#[derive(Default)]
 pub struct TagState {
     pub distances: HashMap<usize, Option<f32>>,
+    pub lastdistances: HashMap<usize, Option<f32>>,
     pub solutions: Option<(Vec2, Vec2)>,
     pub estimated_position: Option<Vec2>,
     pub show_radii: bool,
     pub use_second_solution: bool,
     pub ratemonitor: RateMonitor,
+    pub time: u32 = 1,
+    pub last_time: u32 = 0,
 }
 
 /// Holds anchor positions, measured distances, and the computed result.
@@ -249,13 +255,18 @@ fn consume_distance_events(
     for ev in events.read() {
         let tagstate = state.tagstates.entry(ev.tag_id).or_insert(TagState {
             distances: HashMap::new(),
+            lastdistances: HashMap::new(),
             solutions: None,
             estimated_position: None,
             show_radii: false,
             use_second_solution: false,
             ratemonitor: RateMonitor::new(Duration::from_secs(2)),
+            time: ev.timestamp,
+            last_time: 0,
         });
         tagstate.distances.insert(ev.anchor_id, ev.distance);
+        tagstate.last_time = tagstate.time;
+        tagstate.time = ev.timestamp;
         tagstate.ratemonitor.record();
     }
 }
@@ -527,6 +538,7 @@ fn triangulation_ui(
                 let mut valid_measurements = Vec::new();
                 for (&anchor_id, &opt_dist) in tagstate.distances.iter() {
                     if let Some(mut dist) = opt_dist {
+                        dist = 
                         if use_lut {
                             dist = apply_lut(dist, &lut);
                         }

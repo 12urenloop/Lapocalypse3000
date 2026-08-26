@@ -146,6 +146,7 @@ fn log_playback_system(
                 anchor_id: anchorid,
                 tag_id: tagid,
                 distance: val.map(|(_, d)| d),
+                timestamp: 0,
             });
         }
     }

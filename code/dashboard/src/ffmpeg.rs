@@ -140,7 +140,7 @@ fn play_video(
                         .run(&decoded, &mut rgb_frame)
                         .unwrap();
                     // update data of image texture
-                    let image = images.get_mut(&video_player.image_handle).unwrap();
+                    let mut image = images.get_mut(&video_player.image_handle).unwrap();
 
                     if let Some(id) = image.data.as_mut() {
                         id.copy_from_slice(rgb_frame.data(0));

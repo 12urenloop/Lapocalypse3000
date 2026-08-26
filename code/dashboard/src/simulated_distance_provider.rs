@@ -69,6 +69,7 @@ fn emit_simulated_distances(
                     anchor_id,
                     tag_id: *tag_id,
                     distance: Some(distance),
+                    timestamp: 0,
                 });
             }
         }

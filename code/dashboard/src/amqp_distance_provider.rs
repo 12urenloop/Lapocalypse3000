@@ -165,8 +165,8 @@ fn setup_amqp_connection(
 
             let mut consumer = match channel
                 .basic_consume(
-                    &cfg.queue,
-                    &cfg.consumer_tag,
+                    cfg.queue.into(),
+                    cfg.consumer_tag.into(),
                     BasicConsumeOptions::default(),
                     FieldTable::default(),
                 )
@@ -179,10 +179,10 @@ fn setup_amqp_connection(
                 }
             };
 
-            eprintln!(
-                "[AMQP] consuming queue='{}' consumer_tag='{}' bind_exchange={:?} bind_routing_key='{}'",
-                cfg.queue, cfg.consumer_tag, cfg.bind_exchange, cfg.bind_routing_key
-            );
+            // eprintln!(
+            //     "[AMQP] consuming queue='{}' consumer_tag='{}' bind_exchange={:?} bind_routing_key='{}'",
+            //     cfg.queue, cfg.consumer_tag, cfg.bind_exchange, cfg.bind_routing_key
+            // );
 
             use futures_util::StreamExt;
 
@@ -296,6 +296,7 @@ fn forward_amqp_to_events(
                     anchor_id: payload.anchor_id,
                     tag_id: payload.tag_id,
                     distance: Some(payload.distance_m),
+                    timestamp: 0,
                 });
             }
         }
@@ -307,6 +308,7 @@ fn forward_amqp_to_events(
                 anchor_id,
                 tag_id,
                 distance: None,
+                timestamp: 0,
             });
             false
         } else {
@@ -326,7 +328,7 @@ async fn setup_queue_and_binding(
     if cfg.declare_queue {
         channel
             .queue_declare(
-                &cfg.queue,
+                cfg.queue.clone().into(),
                 QueueDeclareOptions {
                     durable: cfg.durablequeue,
                     ..QueueDeclareOptions::default()
@@ -334,7 +336,7 @@ async fn setup_queue_and_binding(
                 FieldTable::default(),
             )
             .await?;
-        eprintln!("[AMQP] declared queue '{}'", cfg.queue);
+        // eprintln!("[AMQP] declared queue '{}'", cfg.queue);
     } else {
         eprintln!("[AMQP] queue declaration disabled for '{}'", cfg.queue);
     }
@@ -342,17 +344,17 @@ async fn setup_queue_and_binding(
     if let Some(exchange) = &cfg.bind_exchange {
         channel
             .queue_bind(
-                &cfg.queue,
-                exchange,
-                &cfg.bind_routing_key,
+                cfg.queue.clone().into(),
+                exchange.clone().into(),
+                cfg.clone().bind_routing_key.into(),
                 QueueBindOptions::default(),
                 FieldTable::default(),
             )
             .await?;
-        eprintln!(
-            "[AMQP] bound queue '{}' -> exchange '{}' with routing_key '{}'",
-            cfg.queue, exchange, cfg.bind_routing_key
-        );
+        // eprintln!(
+        //     "[AMQP] bound queue '{}' -> exchange '{}' with routing_key '{}'",
+        //     cfg.queue, exchange, cfg.bind_routing_key
+        // );
     }
 
     Ok(())

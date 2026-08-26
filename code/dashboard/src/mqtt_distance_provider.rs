@@ -148,6 +148,7 @@ fn forward_mqtt_to_events(
                     anchor_id: payload.anchor_id,
                     tag_id: payload.tag_id,
                     distance: Some(payload.distance),
+                    timestamp: 0,
                 });
             }
         }
@@ -159,6 +160,7 @@ fn forward_mqtt_to_events(
                 anchor_id,
                 tag_id,
                 distance: None,
+                timestamp: 0,
             });
             false
         } else {

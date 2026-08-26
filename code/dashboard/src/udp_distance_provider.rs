@@ -1,4 +1,5 @@
 use bevy::{platform::collections::HashMap, prelude::*};
+use regex::Regex;
 use std::net::UdpSocket;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -35,6 +36,7 @@ struct UdpDistancePayload {
     anchor_id: usize,
     tag_id: usize,
     distance: f32,
+    timestamp: u32,
 }
 
 #[derive(Resource)]
@@ -142,20 +144,24 @@ fn parse_udp_message(text: &str) -> Option<Vec<UdpDistancePayload>> {
     let anchor_id: usize = parts[0].parse().ok()?;
     let mut results = Vec::new();
 
-    for part in &parts[1..] {
-        // Each part looks like "1 = 1.23" or " 2 = 4.56"
-        let kv: Vec<&str> = part.splitn(2, '=').map(|s| s.trim()).collect();
-        if kv.len() == 2 {
-            if let Ok(tag_id) = kv[0].parse::<usize>() {
-                if let Ok(distance) = kv[1].parse::<f32>() {
-                    results.push(UdpDistancePayload {
-                        anchor_id,
-                        tag_id,
-                        distance,
-                    });
-                }
-            }
-        }
+    let re = Regex::new(r"(\d+)=(-?\d+\.\d+)@(\d+)-(\d+)").expect("regex nocompile");
+
+    for part in parts[1..].iter() {
+        println!("{}", part);
+        let caps = re.captures(part).expect("regex parse failed");
+
+        println!("caps = {:?}", caps);
+        println!("0 = {:?}", caps[1].to_lowercase());
+        println!("1 = {:?}", caps[2].to_lowercase());
+        println!("2 = {:?}", caps[3].to_lowercase());
+        println!("3 = {:?}", caps[4].to_lowercase());
+
+        results.push(UdpDistancePayload {
+            anchor_id,
+            tag_id: caps[1].parse().expect("no tagid parse"),
+            distance: caps[2].parse().expect("no dist parse"),
+            timestamp: caps[3].parse().expect("no ts parse"),
+        })
     }
 
     if results.is_empty() {
@@ -189,6 +195,7 @@ fn forward_udp_to_events(
                     anchor_id: payload.anchor_id,
                     tag_id: payload.tag_id,
                     distance: Some(payload.distance),
+                    timestamp: payload.timestamp,
                 });
             }
         }
@@ -201,6 +208,7 @@ fn forward_udp_to_events(
                 anchor_id,
                 tag_id,
                 distance: None,
+                timestamp: 0,
             });
             false
         } else {

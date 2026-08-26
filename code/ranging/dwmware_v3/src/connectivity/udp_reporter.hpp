@@ -3,6 +3,7 @@
 #include <types/taginfo.hpp>
 #include <env/wificonfig.hpp>
 #include <uwb/UWB_common.hpp>
+#include <uwb/SSTWR_initiator_uwbsync.hpp>
 
 
 #ifndef USEWIFI
@@ -55,7 +56,7 @@ void udp_setup() {
 }
 
 
-void sendData(byte* anchorIds, double* distances)
+void sendData(byte* anchorIds, TagState* distances)
 {
     if(USEWIFI){
       // ensureConnection();
@@ -75,8 +76,10 @@ void sendData(byte* anchorIds, double* distances)
 
       String data = String(ANCHOR_ID);
       for(int i = 0; i < N_TAGS; i++){
+        if(distances[i].consumed) continue;
         // String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ", \"tag_id\":" + String(i + 1) + ", \"distance\":" + String(distances[i]) + "}\n";  
-        data += " | " + String(i + 1) + "=" + String(distances[i]);
+        data += " | " + String(i + 1) + "=" + String(distances[i].distance) + "@" + String(distances[i].rollovers) + "-" + String(distances[i].timestamp);
+        distances[i].consumed = true;
       }
       data += "\n";
       udp.beginPacket(host, UDPPORT + ANCHOR_ID);

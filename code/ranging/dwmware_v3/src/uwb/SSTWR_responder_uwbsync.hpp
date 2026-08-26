@@ -28,7 +28,7 @@ static uint8_t tx_resp_msg[] = {0xA0 + TAG_ID, 0x01, 0xE1, 0, 0, 0, 0, 0, 0, 0, 
 class SSTWR_Responder : UWB_Common
 {
 public:
-
+    
     uint32_t status_reg;
     uint32_t lastReceive;
     bool workingReceive;

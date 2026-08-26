@@ -105,6 +105,10 @@ class UWB_Common{
     };
 
     Config config = {standard_dwconfig, 0x0};
+    int64_t uwb_sync_offset = 0;
+    uint32_t last_systime = UINT32_MAX;
+    uint32_t rollovers = 0;
+    
 
     void setup(){
          /* Configure SPI rate, DW3000 supports up to 38 MHz */
@@ -171,6 +175,17 @@ class UWB_Common{
         dwt_setleds(0b11);
         dwt_write32bitreg(LED_CTRL_ID, 0x0101); // set shortest led blink time
 
+    }
+
+    void common_loop(){
+        // keep track of UWB module system time rollovers
+        uint32_t systime = dwt_readsystimestamphi32();
+        dwt_write32bitreg(SYS_TIME_ID, 0);
+        // uint32_t synctime = systime + uwb_sync_offset;
+        if(last_systime > systime){
+            rollovers ++;
+        }
+        last_systime = systime;
     }
 
     void LEDBlinkBlocking(){

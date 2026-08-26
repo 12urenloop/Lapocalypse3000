@@ -9,12 +9,19 @@
 #define UWB_DEBUG true
 #endif
 
+struct TagState
+{
+    double distance = -10.0;
+    uint32_t rollovers = 0;
+    unsigned long timestamp = 0;
+    bool consumed = true;
+};
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes, UWB sys timestamp 4 bytes.
 uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0, 1, 2, 3, 4, 0, 0};
 
-//layout: sender, receiver, marker id, timestamp 4 bytes, unused 2 bytes.
+// layout: sender, receiver, marker id, timestamp 4 bytes, unused 2 bytes.
 uint8_t tx_marker_msg[] = {0x0 + ANCHOR_ID, ANCHORBROADCAST, 0xE5, 0, 0, 0, 0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes, UWB sys timestamp 4 bytes.
 uint8_t rx_resp_msg[] = {0xA1, 0x0 + ANCHOR_ID, 0xE1, 1, 2, 3, 4, 0, 0, 1, 2, 3, 4, 0, 0};
@@ -25,7 +32,7 @@ public:
     uint64_t nextSlot_us;
 
     byte tagIDs[N_TAGS] = TAG_IDS; // array of size ntags
-    double distances[N_TAGS];      // array of size ntags
+    TagState distances[N_TAGS];    // array of size ntags
     unsigned short target_tag_ix;
 
     struct Config
@@ -41,7 +48,6 @@ public:
     uint32_t lastReceive;
     bool workingReceive;
     uint32_t lastloop = millis();
-    int64_t uwb_sync_offset = 0;
 
     SSTWR_Initiator(UWB_Common::Config cconfig, Config config, uint32_t mySlot) : anchorConfig(config)
     {
@@ -52,7 +58,7 @@ public:
 
         for (int i = 0; i < N_TAGS; i++)
         {
-            distances[i] = -10.0;
+            distances[i].distance = -10.0;
         }
 
         tx_poll_msg[0] = cconfig.address; // set sender
@@ -80,14 +86,13 @@ public:
 
     void slotted_loop()
     {
+        common_loop();
         tx_poll_msg[1] = tagIDs[target_tag_ix]; // set receiver
         rx_resp_msg[0] = tagIDs[target_tag_ix]; // expect message from receiver
         SSTWR_measuredistance();
         target_tag_ix++;
         target_tag_ix %= N_TAGS;
-
     }
-
 
     void SSTWR_measuredistance()
     {
@@ -101,23 +106,26 @@ public:
         uint32_t systime = dwt_readsystimestamphi32();
         dwt_write32bitreg(SYS_TIME_ID, 0);
         uint32_t synctime = systime + uwb_sync_offset;
-        uint32_t next_tx = (uint32_t)( synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME));
-        if(next_tx < synctime + MS_TO_DWT_TIME * 2) next_tx += anchorConfig.slotIntervalMS * MS_TO_DWT_TIME;
+        uint32_t next_tx = (uint32_t)(synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME));
+        if (next_tx < synctime + MS_TO_DWT_TIME * 2)
+            next_tx += anchorConfig.slotIntervalMS * MS_TO_DWT_TIME;
         // uint32_t next_tx = synctime + MS_TO_DWT_TIME * 50;
         // Serial.print("systime: "); Serial.print(systime); Serial.print(" synctime: "); Serial.print(synctime); Serial.print(" next_tx: "); Serial.println(next_tx);
         dwt_setdelayedtrxtime(next_tx - uwb_sync_offset);
         // next_tx = 0xF0F0;
         resp_msg_set_ts(&tx_poll_msg[POLL_SYSTS_IDX], next_tx); // set tx UWB sys timestamp in poll message for sync
-        dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);          /* Zero offset in TX buffer, ranging. */
+        dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0);   /* Zero offset in TX buffer. */
+        dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);            /* Zero offset in TX buffer, ranging. */
         /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
          * set by dwt_setrxaftertxdelay() has elapsed. */
         // waitForSlot();
 
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
         int ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
-        if(ret != 0){
-            Serial.print("ret="); Serial.println(ret);
+        if (ret != 0)
+        {
+            Serial.print("ret=");
+            Serial.println(ret);
             delay(100);
             return;
         }
@@ -126,9 +134,10 @@ public:
 
         /* Poll DW IC until TX frame sent event set. See NOTE 6 below. */
         while (!(status_reg = dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
-        { 
+        {
         };
-        Serial.print("loop ms: "); Serial.println(millis() - lastms);
+        Serial.print("loop ms: ");
+        Serial.println(millis() - lastms);
         lastms = millis();
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
 
@@ -136,7 +145,6 @@ public:
         while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
         {
         };
-
 
         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
         frame_seq_nb++;
@@ -199,12 +207,12 @@ public:
                     //     Serial.print(rx_buffer[i], HEX);
                     //     Serial.print(" ");
                     // }
-                    if(resp_systs > synctime){
+                    if (resp_systs > synctime)
+                    {
                         uwb_sync_offset = resp_systs - rxsystime;
-                        Serial.print("UPDATE uwb_sync_offset: "); Serial.println(uwb_sync_offset / MS_TO_DWT_TIME);
+                        Serial.print("UPDATE uwb_sync_offset: ");
+                        Serial.println(uwb_sync_offset / MS_TO_DWT_TIME);
                     }
-
-
 
                     /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
                     rtd_init = resp_rx_ts - poll_tx_ts;
@@ -217,9 +225,13 @@ public:
                     tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
                     // printf("TOF: %f \n", tof * 100000);
                     distance = tof * SPEED_OF_LIGHT;
-                    distances[target_tag_ix] = distance;
+                    distances[target_tag_ix].distance = distance;
+                    distances[target_tag_ix].timestamp = resp_systs / MS_TO_DWT_TIME;
+                    distances[target_tag_ix].rollovers = rollovers;
+                    distances[target_tag_ix].consumed = false;
 
-                    if(UWB_DEBUG) {
+                    if (UWB_DEBUG)
+                    {
                         Serial.print("= ");
                         Serial.print(target_tag_ix);
                         Serial.print(" ");
@@ -229,7 +241,6 @@ public:
                         Serial.print(" ");
                         Serial.println(millis());
                     }
-
 
                     test_run_info((unsigned char *)dist_str);
 
@@ -243,14 +254,16 @@ public:
                 }
                 else
                 {
-                    if(UWB_DEBUG) Serial.println(">no match");
-                    //Serial.println(rx_buffer[1], HEX);
-                    //Serial.println(rx_buffer[2], HEX);
+                    if (UWB_DEBUG)
+                        Serial.println(">no match");
+                    // Serial.println(rx_buffer[1], HEX);
+                    // Serial.println(rx_buffer[2], HEX);
                 }
             }
             else
             {
-                if(UWB_DEBUG) Serial.println(">FLNOK");
+                if (UWB_DEBUG)
+                    Serial.println(">FLNOK");
                 Serial.print(" ");
                 Serial.print(target_tag_ix);
                 Serial.print(" ");
@@ -259,7 +272,8 @@ public:
         }
         else
         {
-            if(UWB_DEBUG) {
+            if (UWB_DEBUG)
+            {
                 Serial.print(">RX error: ");
                 Serial.print(status_reg, HEX);
                 Serial.print(" ");
@@ -270,7 +284,5 @@ public:
             /* Clear RX error/timeout events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
-
     }
-
 };

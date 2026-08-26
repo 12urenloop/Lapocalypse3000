@@ -4,21 +4,24 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.18.1"
-bevy_egui = "^0.39.1"
+bevy = { version = "0.19.1", features = ["dynamic_linking"] }
+bevy_egui = "^0.42.0"
 ffmpeg-next = "8.1.0"
-metrics = "^0.24.3"
+# metrics = "^0.24.3"
 rumqttc = "^0.25.1"
-lapin = "^2.5.0"
 tokio = { version = "^1.48.0", features = ["rt", "rt-multi-thread", "time", "net"] }
 futures-util = "^0.3.31"
 serde = "^1.0.228"
 serde_json = "^1.0.145"
+regex = "1.13.1"
+rustix = "1.1.4"
+log = { version = "*", features = ["max_level_debug", "release_max_level_warn"] }
+lapin = "4.10.0"
 
-[dependencies.bevy_metrics_dashboard]
-version = "0.8.0"
-default-features = false
-features = ["bevy_egui"]
+# [dependencies.bevy_metrics_dashboard]
+# version = "0.8.0"
+# default-features = false
+# features = ["bevy_egui"]
 
 [profile.dev]
 opt-level = 1

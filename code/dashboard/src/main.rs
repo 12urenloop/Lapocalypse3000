@@ -3,6 +3,7 @@ mod amqp_position_publisher;
 mod ffmpeg;
 mod log_distance_provider;
 mod mqtt_distance_provider;
+mod rate_monitor;
 mod simulated_distance_provider;
 mod triangulation;
 mod udp_distance_provider;
@@ -16,12 +17,12 @@ use metrics::{
     Unit, counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram,
 };
 use mqtt_distance_provider::MqttDistanceProviderPlugin;
-use udp_distance_provider::UdpDistanceProviderPlugin;
 use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use triangulation::TriangulationPlugin;
+use udp_distance_provider::UdpDistanceProviderPlugin;
 
 use crate::ffmpeg::FfmpegPlugin;
 use simulated_distance_provider::SimulatedDistanceProviderPlugin;

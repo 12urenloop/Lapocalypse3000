@@ -1,5 +1,6 @@
 use std::{collections::HashSet, time::Duration};
 
+use crate::rate_monitor::RateMonitor;
 use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
@@ -58,9 +59,9 @@ pub struct ActiveDistanceProvider {
 impl Default for ActiveDistanceProvider {
     fn default() -> Self {
         Self {
-            kind: DistanceProviderKind::LogFiles,
+            kind: DistanceProviderKind::Udp,
             // Manual is always available; other providers register themselves.
-            available: vec![DistanceProviderKind::Manual],
+            available: vec![DistanceProviderKind::Udp],
         }
     }
 }
@@ -104,6 +105,7 @@ pub struct TagState {
     pub estimated_position: Option<Vec2>,
     pub show_radii: bool,
     pub use_second_solution: bool,
+    pub ratemonitor: RateMonitor,
 }
 
 /// Holds anchor positions, measured distances, and the computed result.
@@ -165,9 +167,13 @@ impl Default for TriangulationState {
         // anchors.insert(3, Vec2::new(0., 0.));
 
         // plein 3 4 5
-        anchors.insert(4, Vec2::new(-20.5, 31.8));
-        anchors.insert(5, Vec2::new(-42.6, 0.9));
-        anchors.insert(6, Vec2::new(-12.6, -32.9));
+        // anchors.insert(4, Vec2::new(-20.5, 31.8));
+        // anchors.insert(5, Vec2::new(-42.6, 0.9));
+        // anchors.insert(6, Vec2::new(-12.6, -32.9));
+
+        // 2 anchor setup test
+        anchors.insert(1, Vec2::new(0.0, 0.0));
+        anchors.insert(2, Vec2::new(1.8, 0.0));
 
         let mut use_second_set = HashSet::new();
         use_second_set.insert((1, 2));
@@ -189,8 +195,8 @@ impl Default for TriangulationState {
         Self {
             anchors,
             tagstates: defaulttags,
-            scale: 5.0,
-            bgscale: 0.251,
+            scale: 100.0,
+            bgscale: 0.0,
             use_second: use_second_set,
             show_extradebug: true,
             use_lut: false,
@@ -247,8 +253,10 @@ fn consume_distance_events(
             estimated_position: None,
             show_radii: false,
             use_second_solution: false,
+            ratemonitor: RateMonitor::new(Duration::from_secs(2)),
         });
         tagstate.distances.insert(ev.anchor_id, ev.distance);
+        tagstate.ratemonitor.record();
     }
 }
 
@@ -461,7 +469,11 @@ fn triangulation_ui(
             let lut = state.lut.clone();
 
             for (tag_id, tagstate) in state.tagstates.iter_mut() {
-                ui.label(format!("Tag {}", tag_id));
+                ui.label(format!(
+                    "Tag {}, rate {:.2}/s",
+                    tag_id,
+                    tagstate.ratemonitor.rate()
+                ));
                 ui.checkbox(&mut tagstate.show_radii, "Show radii");
                 ui.checkbox(&mut tagstate.use_second_solution, "Use second solution");
 

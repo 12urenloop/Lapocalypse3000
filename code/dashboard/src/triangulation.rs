@@ -103,15 +103,13 @@ impl Plugin for TriangulationPlugin {
 // ---------------------------------------------------------------------------
 #[derive(Default)]
 pub struct TagState {
-    pub distances: HashMap<usize, Option<f32>>,
-    pub lastdistances: HashMap<usize, Option<f32>>,
+    pub distances: HashMap<usize, (Option<f32>, u32)>,
+    pub lastdistances: HashMap<usize, (Option<f32>, u32)>,
     pub solutions: Option<(Vec2, Vec2)>,
     pub estimated_position: Option<Vec2>,
     pub show_radii: bool,
     pub use_second_solution: bool,
     pub ratemonitor: RateMonitor,
-    pub time: u32 = 1,
-    pub last_time: u32 = 0,
 }
 
 /// Holds anchor positions, measured distances, and the computed result.
@@ -261,12 +259,13 @@ fn consume_distance_events(
             show_radii: false,
             use_second_solution: false,
             ratemonitor: RateMonitor::new(Duration::from_secs(2)),
-            time: ev.timestamp,
-            last_time: 0,
         });
-        tagstate.distances.insert(ev.anchor_id, ev.distance);
-        tagstate.last_time = tagstate.time;
-        tagstate.time = ev.timestamp;
+        if let Some(oldsample) = tagstate.distances.get(&ev.anchor_id) {
+            tagstate.lastdistances.insert(ev.anchor_id, *oldsample);
+        }
+        tagstate
+            .distances
+            .insert(ev.anchor_id, (ev.distance, ev.timestamp));
         tagstate.ratemonitor.record();
     }
 }
@@ -491,7 +490,7 @@ fn triangulation_ui(
                 let mut distances_sorted: Vec<_> = tagstate.distances.iter_mut().collect();
                 distances_sorted.sort_by_key(|(id, _)| **id);
 
-                for (&anchor_id, opt_dist) in distances_sorted {
+                for (&anchor_id, (opt_dist, _)) in distances_sorted {
                     ui.horizontal(|ui| {
                         ui.label(format!("d(Anchor {} -> P):", anchor_id));
                         if manual {
@@ -525,7 +524,7 @@ fn triangulation_ui(
                                 .button(format!("Add distance for Anchor {}", anchor_id))
                                 .clicked()
                             {
-                                tagstate.distances.insert(anchor_id, Some(0.0));
+                                tagstate.distances.insert(anchor_id, (Some(0.0), 0));
                             }
                         }
                     }
@@ -536,9 +535,55 @@ fn triangulation_ui(
 
                 // Collect available data for solving
                 let mut valid_measurements = Vec::new();
-                for (&anchor_id, &opt_dist) in tagstate.distances.iter() {
+
+                let anchors_inrange: Vec<usize> = tagstate
+                    .distances
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        if let Some(_) = v.0 {
+                            return Some(*k);
+                        }
+                        return None;
+                    })
+                    .collect();
+
+                let mut avgts: i64 = 0;
+                let mut nts: u32 = 0;
+                for anchorid in anchors_inrange.iter() {
+                    avgts += tagstate.distances.get(anchorid).unwrap_or(&(None, 1)).1 as i64;
+                    avgts += tagstate.lastdistances.get(anchorid).unwrap_or(&(None, 0)).1 as i64;
+                    nts += 2;
+                }
+
+                let mut evaldists: HashMap<usize, Option<f32>> = HashMap::new();
+                if nts > 0 {
+                    avgts /= nts as i64;
+
+                    for anchor_id in anchors_inrange.iter() {
+                        let (dist, ts) = tagstate.distances.get(anchor_id).unwrap_or(&(None, 1));
+                        let (odist, ots) =
+                            tagstate.lastdistances.get(anchor_id).unwrap_or(&(None, 0));
+
+                        let evaldist = odist.unwrap_or(0.0)
+                            + (dist.unwrap_or(0.0) - odist.unwrap_or(0.0))
+                                / (*ts as f32 - *ots as f32)
+                                * (avgts as f32 - *ots as f32);
+                        evaldists.insert(*anchor_id, Some(evaldist));
+                        // println!(
+                        //     "ts {} - {} dist {} {} = {}",
+                        //     ots,
+                        //     ts,
+                        //     odist.unwrap_or(-1.0),
+                        //     dist.unwrap_or(-1.0),
+                        //     evaldist
+                        // );
+                    }
+                } else {
+                    // println!("cant find avgts")
+                }
+
+                for (&anchor_id, &opt_dist) in evaldists.iter() {
                     if let Some(mut dist) = opt_dist {
-                        dist = 
                         if use_lut {
                             dist = apply_lut(dist, &lut);
                         }
@@ -559,7 +604,7 @@ fn triangulation_ui(
                     let anchorsinrange: Vec<usize> = tagstate
                         .distances
                         .iter()
-                        .filter_map(|(&k, v)| v.map(|_| k))
+                        .filter_map(|(&k, v)| v.0.map(|_| k))
                         .collect();
 
                     let sorted_tuple = (anchorsinrange.len() == 2).then(|| {
@@ -700,12 +745,18 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
     //         gizmos.line_2d(p1, p2, Color::srgba(1.0, 1.0, 1.0, 0.15));
     //     }
     // }
+    // gizmos.grid(
+    //     Isometry3d::IDENTITY,
+    //     UVec2::new(10, 10),
+    //     Vec2::ONE,
+    //     Color::WHITE,
+    // );
 
     for (tag_id, tagstate) in state.tagstates.iter() {
         // radii if enabled
         if tagstate.show_radii || tagstate.estimated_position.is_none() {
             for (&anchor_id, &opt_dist) in tagstate.distances.iter() {
-                if let Some(dist) = opt_dist {
+                if let (Some(dist), _) = opt_dist {
                     if let Some(&anchor_pos) = state.anchors.get(&anchor_id) {
                         let anchor_screen = anchor_pos * s;
                         let hue = ((anchor_id as f32) * 137.5) % 360.0;
@@ -762,7 +813,7 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
             // Lines from anchors to chosen point
             if state.show_extradebug {
                 for (&anchor_id, distance) in tagstate.distances.iter() {
-                    if distance.is_none() {
+                    if distance.0.is_none() {
                         continue;
                     }
                     if let Some(&anchor_pos) = state.anchors.get(&anchor_id) {

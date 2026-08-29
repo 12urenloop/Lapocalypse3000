@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.19.1", features = ["dynamic_linking"] }
+# bevy = { version = "0.19.1", features = ["dynamic_linking"] }
 bevy_egui = "^0.42.0"
 ffmpeg-next = "8.1.0"
 # metrics = "^0.24.3"
@@ -17,6 +17,32 @@ regex = "1.13.1"
 rustix = "1.1.4"
 log = { version = "*", features = ["max_level_debug", "release_max_level_warn"] }
 lapin = "4.10.0"
+bevy = { version = "0.19.1", default-features = false, features = [
+    # Basic application/platform
+    "default_app",
+    "default_platform",
+
+    # 2D
+    "bevy_sprite",
+    "bevy_sprite_render",
+
+    # 3D
+    "bevy_camera",
+    "bevy_mesh",
+    "bevy_mesh",
+    "tonemapping_luts",
+    "bevy_pbr",
+    "png",
+    "bevy_gizmos",
+    "bevy_gizmos_render",
+    "bevy_text",
+    "bevy_material",
+    "bevy_render",
+    "bevy_core_pipeline",
+
+    # Dynamic linking
+    "dynamic_linking",
+] }
 
 # [dependencies.bevy_metrics_dashboard]
 # version = "0.8.0"

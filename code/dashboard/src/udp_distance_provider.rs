@@ -160,7 +160,7 @@ fn parse_udp_message(text: &str) -> Option<Vec<UdpDistancePayload>> {
             anchor_id,
             tag_id: caps[1].parse().expect("no tagid parse"),
             distance: caps[2].parse().expect("no dist parse"),
-            timestamp: caps[3].parse().expect("no ts parse"),
+            timestamp: caps[4].parse().expect("no ts parse"),
         })
     }
 

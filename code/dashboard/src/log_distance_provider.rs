@@ -3,6 +3,7 @@ use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, Distance
 use bevy::render::render_resource::TextureFormat;
 use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use std::f32::consts::PI;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -21,7 +22,9 @@ impl Plugin for LogDistanceProviderPlugin {
 
 // marker component for sprite displaying video frames
 #[derive(Component)]
-pub struct VideoSprite {}
+pub struct VideoSprite {
+    pub image: Handle<Image>,
+}
 
 #[derive(Resource)]
 pub struct LogPlaybackState {
@@ -64,6 +67,8 @@ fn setup_log_provider(
     mut provider: ResMut<ActiveDistanceProvider>,
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     provider.available.push(DistanceProviderKind::LogFiles);
     let image = Image::new_target_texture(
@@ -74,7 +79,30 @@ fn setup_log_provider(
     );
 
     let image_handle = images.add(image);
-    commands.spawn((Sprite::from_image(image_handle), VideoSprite {}));
+    commands.spawn((
+        Sprite::from_image(image_handle.clone()),
+        Transform::default(),
+        VideoSprite {
+            image: image_handle.clone(),
+        },
+    ));
+
+    // let cube_size = 4.0;
+    // let cube_handle = meshes.add(Cuboid::new(cube_size, cube_size, cube_size));
+    // // This material has the texture that has been rendered.
+    // let material_handle = materials.add(StandardMaterial {
+    //     base_color_texture: Some(image_handle),
+    //     reflectance: 0.02,
+    //     unlit: false,
+    //     ..default()
+    // });
+
+    // // Main pass cube, with material containing the rendered first pass texture.
+    // commands.spawn((
+    //     Mesh3d(cube_handle),
+    //     MeshMaterial3d(material_handle),
+    //     Transform::from_xyz(0.0, 0.0, 1.5).with_rotation(Quat::from_rotation_x(-PI / 5.0)),
+    // ));
 }
 
 fn log_playback_system(
@@ -146,7 +174,7 @@ fn log_playback_system(
                 anchor_id: anchorid,
                 tag_id: tagid,
                 distance: val.map(|(_, d)| d),
-                timestamp: 0,
+                timestamp: val.map(|(ts, _)| ts).unwrap_or(0) as u32,
             });
         }
     }
@@ -159,7 +187,7 @@ fn log_playback_ui(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     video_resource: NonSendMut<VideoResource>,
-    mut videosprite: Query<(Entity, &mut Transform, &mut Sprite), With<VideoSprite>>,
+    mut videosprite: Query<(Entity, &mut Transform, &mut VideoSprite)>,
 ) {
     if provider.kind != DistanceProviderKind::LogFiles {
         return;

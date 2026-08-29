@@ -1,3 +1,4 @@
+use crate::deformable_image::DeformableImage;
 use crate::ffmpeg::{VideoPlayer, VideoResource, make_video};
 use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind};
 use bevy::render::render_resource::TextureFormat;
@@ -68,7 +69,7 @@ fn setup_log_provider(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     provider.available.push(DistanceProviderKind::LogFiles);
     let image = Image::new_target_texture(
@@ -79,30 +80,27 @@ fn setup_log_provider(
     );
 
     let image_handle = images.add(image);
+
+    let (deformable, mesh_handle) = DeformableImage::new_rect(
+        Vec2::new(19.2, 10.8),
+        16,
+        &mut meshes,
+    );
+
+    let material_handle = materials.add(ColorMaterial {
+        texture: Some(image_handle.clone()),
+        ..default()
+    });
+
     commands.spawn((
-        Sprite::from_image(image_handle.clone()),
+        Mesh2d(mesh_handle),
+        MeshMaterial2d(material_handle),
         Transform::default(),
+        deformable,
         VideoSprite {
-            image: image_handle.clone(),
+            image: image_handle,
         },
     ));
-
-    // let cube_size = 4.0;
-    // let cube_handle = meshes.add(Cuboid::new(cube_size, cube_size, cube_size));
-    // // This material has the texture that has been rendered.
-    // let material_handle = materials.add(StandardMaterial {
-    //     base_color_texture: Some(image_handle),
-    //     reflectance: 0.02,
-    //     unlit: false,
-    //     ..default()
-    // });
-
-    // // Main pass cube, with material containing the rendered first pass texture.
-    // commands.spawn((
-    //     Mesh3d(cube_handle),
-    //     MeshMaterial3d(material_handle),
-    //     Transform::from_xyz(0.0, 0.0, 1.5).with_rotation(Quat::from_rotation_x(-PI / 5.0)),
-    // ));
 }
 
 fn log_playback_system(
@@ -185,9 +183,9 @@ fn log_playback_ui(
     mut state: ResMut<LogPlaybackState>,
     provider: Res<ActiveDistanceProvider>,
     mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
+    _images: ResMut<Assets<Image>>,
     video_resource: NonSendMut<VideoResource>,
-    mut videosprite: Query<(Entity, &mut Transform, &mut VideoSprite)>,
+    mut videosprite: Query<(Entity, &mut Transform, &VideoSprite, Option<&mut DeformableImage>)>,
 ) {
     if provider.kind != DistanceProviderKind::LogFiles {
         return;
@@ -229,7 +227,7 @@ fn log_playback_ui(
 
         ui.separator();
 
-        if let Ok((entity, mut transform, _)) = videosprite.single_mut() {
+        if let Ok((entity, mut transform, _, opt_deformable)) = videosprite.single_mut() {
             ui.separator();
             ui.label("Video Sprite Transform");
 
@@ -302,6 +300,42 @@ fn log_playback_ui(
                 transform.translation = position;
                 transform.rotation = Quat::from_euler(EulerRot::XYZ, rot_x, rot_y, rot_z);
                 transform.scale = scale;
+            }
+
+            if let Some(mut deformable) = opt_deformable {
+                ui.separator();
+                ui.label("4-Corner Image Deformation");
+                ui.checkbox(&mut deformable.enabled, "Enable Drag Handles Gizmo");
+
+                ui.collapsing("Corner Coordinates (Local)", |ui| {
+                    let labels = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"];
+                    for i in 0..4 {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("{}:", labels[i]));
+                            let cx = ui
+                                .add(
+                                    egui::DragValue::new(&mut deformable.corners[i].x)
+                                        .speed(0.1)
+                                        .prefix("x: "),
+                                )
+                                .changed();
+                            let cy = ui
+                                .add(
+                                    egui::DragValue::new(&mut deformable.corners[i].y)
+                                        .speed(0.1)
+                                        .prefix("y: "),
+                                )
+                                .changed();
+                            if cx || cy {
+                                deformable.is_dirty = true;
+                            }
+                        });
+                    }
+                });
+
+                if ui.button("Reset Corner Quad").clicked() {
+                    deformable.reset_rect();
+                }
             }
         }
         if state.measurements.is_empty() {

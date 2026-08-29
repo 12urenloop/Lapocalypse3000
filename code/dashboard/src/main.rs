@@ -2,6 +2,7 @@
 
 mod amqp_distance_provider;
 mod amqp_position_publisher;
+mod deformable_image;
 mod ffmpeg;
 mod log_distance_provider;
 mod mqtt_distance_provider;
@@ -14,10 +15,8 @@ use amqp_distance_provider::AmqpDistanceProviderPlugin;
 use amqp_position_publisher::AmqpPositionPublisherPlugin;
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
-// use bevy_metrics_dashboard::{DashboardPlugin, DashboardWindow, RegistryPlugin};
-// use metrics::{
-//     Unit, counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram,
-// };
+use deformable_image::DeformableImagePlugin;
+use ffmpeg::FfmpegPlugin;
 use mqtt_distance_provider::MqttDistanceProviderPlugin;
 use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 use serde::Deserialize;
@@ -26,7 +25,6 @@ use std::thread;
 use triangulation::TriangulationPlugin;
 use udp_distance_provider::UdpDistanceProviderPlugin;
 
-use crate::ffmpeg::FfmpegPlugin;
 use simulated_distance_provider::SimulatedDistanceProviderPlugin;
 
 #[derive(Deserialize, Debug)]
@@ -52,6 +50,7 @@ fn main() {
         .add_plugins(EguiPlugin::default())
         // .add_plugins(RegistryPlugin::default())
         // .add_plugins(DashboardPlugin)
+        .add_plugins(DeformableImagePlugin)
         .add_plugins(TriangulationPlugin)
         .add_plugins(MqttDistanceProviderPlugin)
         // .add_plugins(AmqpDistanceProviderPlugin)

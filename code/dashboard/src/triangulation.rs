@@ -166,9 +166,9 @@ impl Default for TriangulationState {
         // anchors.insert(3, Vec2::new(39.7, 12.7));
 
         // gras 1
-        // anchors.insert(1, Vec2::new(11.8, 18.4));
-        // anchors.insert(2, Vec2::new(22.9, 0.0));
-        // anchors.insert(3, Vec2::new(0., 0.));
+        anchors.insert(1, Vec2::new(11.8, 18.4));
+        anchors.insert(2, Vec2::new(22.9, 0.0));
+        anchors.insert(3, Vec2::new(0., 0.));
 
         // plein 3 4 5
         // anchors.insert(4, Vec2::new(-20.5, 31.8));
@@ -176,8 +176,8 @@ impl Default for TriangulationState {
         // anchors.insert(6, Vec2::new(-12.6, -32.9));
 
         // 2 anchor setup test
-        anchors.insert(1, Vec2::new(0.0, 0.0));
-        anchors.insert(2, Vec2::new(1.8, 0.0));
+        // anchors.insert(1, Vec2::new(0.0, 0.0));
+        // anchors.insert(2, Vec2::new(1.8, 0.0));
 
         let mut use_second_set = HashSet::new();
         use_second_set.insert((1, 2));

@@ -1,10 +1,11 @@
 use crate::deformable_image::DeformableImage;
-use crate::ffmpeg::{VideoPlayer, VideoResource, make_video};
+use crate::ffmpeg::{VideoResource, make_video};
 use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind};
+use bevy::ecs::system::SystemParam;
 use bevy::render::render_resource::TextureFormat;
 use bevy::{platform::collections::HashMap, prelude::*};
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use std::f32::consts::PI;
+use bevy_egui::egui;
+use egui::Ui;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -16,8 +17,8 @@ impl Plugin for LogDistanceProviderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(LogPlaybackState::default())
             .add_systems(Startup, setup_log_provider)
-            .add_systems(Update, log_playback_system)
-            .add_systems(EguiPrimaryContextPass, log_playback_ui);
+            .add_systems(Update, log_playback_system);
+        // .add_systems(EguiPrimaryContextPass, log_playback_ui);
     }
 }
 
@@ -81,11 +82,8 @@ fn setup_log_provider(
 
     let image_handle = images.add(image);
 
-    let (deformable, mesh_handle) = DeformableImage::new_rect(
-        Vec2::new(19.2, 10.8),
-        16,
-        &mut meshes,
-    );
+    let (deformable, mesh_handle) =
+        DeformableImage::new_rect(Vec2::new(19.2, 10.8), 16, &mut meshes);
 
     let material_handle = materials.add(ColorMaterial {
         texture: Some(image_handle.clone()),
@@ -178,201 +176,6 @@ fn log_playback_system(
     }
 }
 
-fn log_playback_ui(
-    mut contexts: EguiContexts,
-    mut state: ResMut<LogPlaybackState>,
-    provider: Res<ActiveDistanceProvider>,
-    mut commands: Commands,
-    _images: ResMut<Assets<Image>>,
-    video_resource: NonSendMut<VideoResource>,
-    mut videosprite: Query<(Entity, &mut Transform, &VideoSprite, Option<&mut DeformableImage>)>,
-) {
-    if provider.kind != DistanceProviderKind::LogFiles {
-        return;
-    }
-
-    let Ok(ctx) = contexts.ctx_mut() else {
-        return;
-    };
-
-    egui::Window::new("Log Playback").show(ctx, |ui| {
-        ui.horizontal(|ui| {
-            ui.label("Recording Name:");
-            ui.text_edit_singleline(&mut state.recording_name);
-            ui.label("Video Name:");
-            ui.text_edit_singleline(&mut state.video_name);
-            if ui.button("Load").clicked() {
-                let measurements = load_logs(&state.recording_name);
-                let max_time = measurements.last().map(|m| m.timestamp_ms).unwrap_or(0);
-
-                let videoplayer = make_video(
-                    &state.video_name,
-                    videosprite.single().unwrap().2.image.clone(),
-                    video_resource,
-                    videosprite.single().unwrap().0,
-                );
-
-                commands
-                    .entity(videosprite.single().unwrap().0)
-                    .insert(videoplayer);
-
-                state.measurements = measurements;
-                state.max_time_ms = max_time;
-                state.current_time_ms = 0;
-                state.measurement_index = 0;
-                state.is_playing = false;
-                state.last_frame_time = None;
-            }
-        });
-
-        ui.separator();
-
-        if let Ok((entity, mut transform, _, opt_deformable)) = videosprite.single_mut() {
-            ui.separator();
-            ui.label("Video Sprite Transform");
-
-            let mut position = transform.translation;
-            let (mut rot_x, mut rot_y, mut rot_z) = transform.rotation.to_euler(EulerRot::XYZ);
-            let mut scale = transform.scale;
-
-            let mut changed = false;
-
-            ui.collapsing("Position", |ui| {
-                changed |= ui
-                    .add(
-                        egui::DragValue::new(&mut position.x)
-                            .speed(0.01)
-                            .prefix("x: "),
-                    )
-                    .changed();
-                changed |= ui
-                    .add(
-                        egui::DragValue::new(&mut position.y)
-                            .speed(0.01)
-                            .prefix("y: "),
-                    )
-                    .changed();
-                changed |= ui
-                    .add(
-                        egui::DragValue::new(&mut position.z)
-                            .speed(0.01)
-                            .prefix("z: "),
-                    )
-                    .changed();
-            });
-
-            ui.collapsing("Rotation (degrees)", |ui| {
-                let mut deg_x = rot_x.to_degrees();
-                let mut deg_y = rot_y.to_degrees();
-                let mut deg_z = rot_z.to_degrees();
-
-                let cx = ui
-                    .add(egui::DragValue::new(&mut deg_x).speed(0.5).prefix("x: "))
-                    .changed();
-                let cy = ui
-                    .add(egui::DragValue::new(&mut deg_y).speed(0.5).prefix("y: "))
-                    .changed();
-                let cz = ui
-                    .add(egui::DragValue::new(&mut deg_z).speed(0.5).prefix("z: "))
-                    .changed();
-
-                if cx || cy || cz {
-                    rot_x = deg_x.to_radians();
-                    rot_y = deg_y.to_radians();
-                    rot_z = deg_z.to_radians();
-                    changed = true;
-                }
-            });
-
-            ui.collapsing("Scale", |ui| {
-                changed |= ui
-                    .add(egui::DragValue::new(&mut scale.x).speed(0.01).prefix("x: "))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut scale.y).speed(0.01).prefix("y: "))
-                    .changed();
-                changed |= ui
-                    .add(egui::DragValue::new(&mut scale.z).speed(0.01).prefix("z: "))
-                    .changed();
-            });
-
-            if changed {
-                transform.translation = position;
-                transform.rotation = Quat::from_euler(EulerRot::XYZ, rot_x, rot_y, rot_z);
-                transform.scale = scale;
-            }
-
-            if let Some(mut deformable) = opt_deformable {
-                ui.separator();
-                ui.label("4-Corner Image Deformation");
-                ui.checkbox(&mut deformable.enabled, "Enable Drag Handles Gizmo");
-
-                ui.collapsing("Corner Coordinates (Local)", |ui| {
-                    let labels = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"];
-                    for i in 0..4 {
-                        ui.horizontal(|ui| {
-                            ui.label(format!("{}:", labels[i]));
-                            let cx = ui
-                                .add(
-                                    egui::DragValue::new(&mut deformable.corners[i].x)
-                                        .speed(0.1)
-                                        .prefix("x: "),
-                                )
-                                .changed();
-                            let cy = ui
-                                .add(
-                                    egui::DragValue::new(&mut deformable.corners[i].y)
-                                        .speed(0.1)
-                                        .prefix("y: "),
-                                )
-                                .changed();
-                            if cx || cy {
-                                deformable.is_dirty = true;
-                            }
-                        });
-                    }
-                });
-
-                if ui.button("Reset Corner Quad").clicked() {
-                    deformable.reset_rect();
-                }
-            }
-        }
-        if state.measurements.is_empty() {
-            ui.label("No data loaded.");
-            return;
-        }
-
-        ui.label(format!("Loaded {} measurements.", state.measurements.len()));
-
-        ui.horizontal(|ui| {
-            if ui
-                .button(if state.is_playing { "Pause" } else { "Play" })
-                .clicked()
-            {
-                state.is_playing = !state.is_playing;
-                if state.is_playing {
-                    // Reset the frame time so that we don't jump on resume
-                    state.last_frame_time = None;
-                }
-            }
-
-            if ui.button("Restart").clicked() {
-                state.current_time_ms = 0;
-                state.measurement_index = 0;
-            }
-        });
-
-        let mut time_f64 = state.current_time_ms as f64;
-        ui.spacing_mut().slider_width = 700.0;
-        let slider = egui::Slider::new(&mut time_f64, 0.0..=state.max_time_ms as f64).text("ms");
-        if ui.add(slider).changed() {
-            state.current_time_ms = time_f64 as u64;
-            state.measurement_index = 0;
-        }
-    });
-}
-
 fn load_logs(recording_name: &str) -> Vec<LogMeasurement> {
     let mut measurements = Vec::new();
     let dir = Path::new("data").join(recording_name);
@@ -426,4 +229,215 @@ fn load_logs(recording_name: &str) -> Vec<LogMeasurement> {
     }
 
     measurements
+}
+
+#[derive(SystemParam)]
+pub struct LogDistanceUiState<'w, 's> {
+    state: ResMut<'w, LogPlaybackState>,
+    provider: Res<'w, ActiveDistanceProvider>,
+    _images: ResMut<'w, Assets<Image>>,
+    video_resource: NonSendMut<'w, VideoResource>,
+    videosprite: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static mut Transform,
+            &'static VideoSprite,
+            Option<&'static mut DeformableImage>,
+        ),
+    >,
+}
+
+pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDistanceUiState) {
+    if params.provider.kind != DistanceProviderKind::LogFiles {
+        return;
+    }
+    ui.label("Recording Name:");
+    ui.text_edit_singleline(&mut params.state.recording_name);
+    ui.label("Video Name:");
+    ui.text_edit_singleline(&mut params.state.video_name);
+    ui.horizontal(|ui| {
+        ui.label("Recording Name:");
+        ui.text_edit_singleline(&mut params.state.recording_name);
+    });
+    ui.horizontal(|ui| {
+        ui.label("Video Name:");
+        ui.text_edit_singleline(&mut params.state.video_name);
+    });
+    if ui.button("Load").clicked() {
+        let measurements = load_logs(&params.state.recording_name);
+        let max_time = measurements.last().map(|m| m.timestamp_ms).unwrap_or(0);
+
+        let videoplayer = make_video(
+            &params.state.video_name,
+            params.videosprite.single().unwrap().2.image.clone(),
+            params.video_resource,
+            params.videosprite.single().unwrap().0,
+        );
+
+        commands
+            .entity(params.videosprite.single().unwrap().0)
+            .insert(videoplayer);
+
+        params.state.measurements = measurements;
+        params.state.max_time_ms = max_time;
+        params.state.current_time_ms = 0;
+        params.state.measurement_index = 0;
+        params.state.is_playing = false;
+        params.state.last_frame_time = None;
+    }
+
+    ui.separator();
+
+    if let Ok((_, mut transform, _, opt_deformable)) = params.videosprite.single_mut() {
+        ui.separator();
+        ui.label("Video Sprite Transform");
+
+        let mut position = transform.translation;
+        let (mut rot_x, mut rot_y, mut rot_z) = transform.rotation.to_euler(EulerRot::XYZ);
+        let mut scale = transform.scale;
+
+        let mut changed = false;
+
+        ui.collapsing("Position", |ui| {
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut position.x)
+                        .speed(0.01)
+                        .prefix("x: "),
+                )
+                .changed();
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut position.y)
+                        .speed(0.01)
+                        .prefix("y: "),
+                )
+                .changed();
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut position.z)
+                        .speed(0.01)
+                        .prefix("z: "),
+                )
+                .changed();
+        });
+
+        ui.collapsing("Rotation (degrees)", |ui| {
+            let mut deg_x = rot_x.to_degrees();
+            let mut deg_y = rot_y.to_degrees();
+            let mut deg_z = rot_z.to_degrees();
+
+            let cx = ui
+                .add(egui::DragValue::new(&mut deg_x).speed(0.5).prefix("x: "))
+                .changed();
+            let cy = ui
+                .add(egui::DragValue::new(&mut deg_y).speed(0.5).prefix("y: "))
+                .changed();
+            let cz = ui
+                .add(egui::DragValue::new(&mut deg_z).speed(0.5).prefix("z: "))
+                .changed();
+
+            if cx || cy || cz {
+                rot_x = deg_x.to_radians();
+                rot_y = deg_y.to_radians();
+                rot_z = deg_z.to_radians();
+                changed = true;
+            }
+        });
+
+        ui.collapsing("Scale", |ui| {
+            changed |= ui
+                .add(egui::DragValue::new(&mut scale.x).speed(0.01).prefix("x: "))
+                .changed();
+            changed |= ui
+                .add(egui::DragValue::new(&mut scale.y).speed(0.01).prefix("y: "))
+                .changed();
+            changed |= ui
+                .add(egui::DragValue::new(&mut scale.z).speed(0.01).prefix("z: "))
+                .changed();
+        });
+
+        if changed {
+            transform.translation = position;
+            transform.rotation = Quat::from_euler(EulerRot::XYZ, rot_x, rot_y, rot_z);
+            transform.scale = scale;
+        }
+
+        if let Some(mut deformable) = opt_deformable {
+            ui.separator();
+            ui.label("4-Corner Image Deformation");
+            ui.checkbox(&mut deformable.enabled, "Enable Drag Handles Gizmo");
+
+            ui.collapsing("Corner Coordinates (Local)", |ui| {
+                let labels = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"];
+                for i in 0..4 {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("{}:", labels[i]));
+                        let cx = ui
+                            .add(
+                                egui::DragValue::new(&mut deformable.corners[i].x)
+                                    .speed(0.1)
+                                    .prefix("x: "),
+                            )
+                            .changed();
+                        let cy = ui
+                            .add(
+                                egui::DragValue::new(&mut deformable.corners[i].y)
+                                    .speed(0.1)
+                                    .prefix("y: "),
+                            )
+                            .changed();
+                        if cx || cy {
+                            deformable.is_dirty = true;
+                        }
+                    });
+                }
+            });
+
+            if ui.button("Reset Corner Quad").clicked() {
+                deformable.reset_rect();
+            }
+        }
+    }
+    if params.state.measurements.is_empty() {
+        ui.label("No data loaded.");
+        return;
+    }
+
+    ui.label(format!(
+        "Loaded {} measurements.",
+        params.state.measurements.len()
+    ));
+
+    ui.horizontal(|ui| {
+        if ui
+            .button(if params.state.is_playing {
+                "Pause"
+            } else {
+                "Play"
+            })
+            .clicked()
+        {
+            params.state.is_playing = !params.state.is_playing;
+            if params.state.is_playing {
+                // Reset the frame time so that we don't jump on resume
+                params.state.last_frame_time = None;
+            }
+        }
+
+        if ui.button("Restart").clicked() {
+            params.state.current_time_ms = 0;
+            params.state.measurement_index = 0;
+        }
+    });
+
+    let mut time_f64 = params.state.current_time_ms as f64;
+    ui.spacing_mut().slider_width = 700.0;
+    let slider = egui::Slider::new(&mut time_f64, 0.0..=params.state.max_time_ms as f64).text("ms");
+    if ui.add(slider).changed() {
+        params.state.current_time_ms = time_f64 as u64;
+        params.state.measurement_index = 0;
+    }
 }

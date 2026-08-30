@@ -10,6 +10,7 @@ mod rate_monitor;
 mod simulated_distance_provider;
 mod triangulation;
 mod udp_distance_provider;
+mod ui;
 
 use amqp_distance_provider::AmqpDistanceProviderPlugin;
 use amqp_position_publisher::AmqpPositionPublisherPlugin;
@@ -26,6 +27,8 @@ use triangulation::TriangulationPlugin;
 use udp_distance_provider::UdpDistanceProviderPlugin;
 
 use simulated_distance_provider::SimulatedDistanceProviderPlugin;
+
+use crate::ui::UiPlugin;
 
 #[derive(Deserialize, Debug)]
 struct MqttMessage {
@@ -58,6 +61,7 @@ fn main() {
         .add_plugins(log_distance_provider::LogDistanceProviderPlugin)
         .add_plugins(SimulatedDistanceProviderPlugin)
         .add_plugins(UdpDistanceProviderPlugin)
+        .add_plugins(UiPlugin)
         // .add_plugins(AmqpPositionPublisherPlugin)
         // .insert_resource(MqttReceiver { messages })
         .add_systems(Startup, world_setup)

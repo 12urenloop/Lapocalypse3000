@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
-use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
-use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 
 use bevy::time::common_conditions::on_timer;
 use ffmpeg_next as ffmpeg;
@@ -18,8 +16,8 @@ pub struct FfmpegPlugin;
 
 impl Plugin for FfmpegPlugin {
     fn build(&self, app: &mut App) {
-        app.init_non_send_resource::<VideoResource>()
-            .add_systems(Startup, (initialize_ffmpeg))
+        app.init_non_send::<VideoResource>()
+            .add_systems(Startup, initialize_ffmpeg)
             .add_systems(
                 Update,
                 play_video.run_if(on_timer(Duration::from_micros(33333))),
@@ -54,7 +52,13 @@ fn initialize_ffmpeg() {
 // workaround non-send data not being allowed in components by using non-send resource instead
 #[derive(Default)]
 pub struct VideoResource {
-    pub video_players: HashMap<Entity, VideoPlayerNonSendData>,
+    video_players: HashMap<Entity, VideoPlayerNonSendData>,
+}
+
+impl VideoResource {
+    fn get_videoplayers(self) -> HashMap<Entity, VideoPlayerNonSendData> {
+        return self.video_players;
+    }
 }
 
 struct VideoPlayerNonSendData {

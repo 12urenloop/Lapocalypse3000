@@ -1,10 +1,8 @@
-#![feature(default_field_values)]
-
 use std::{collections::HashSet, time::Duration};
 
 use crate::rate_monitor::RateMonitor;
-use bevy::{platform::collections::HashMap, prelude::*};
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use bevy::{ecs::system::SystemParam, platform::collections::HashMap, prelude::*};
+use bevy_egui::egui::{self, Ui};
 
 // ---------------------------------------------------------------------------
 // Distance measurement event — the universal interface for all providers
@@ -93,8 +91,7 @@ impl Plugin for TriangulationPlugin {
                 export_positions.run_if(bevy::time::common_conditions::on_timer(
                     std::time::Duration::from_millis(200),
                 )),
-            )
-            .add_systems(EguiPrimaryContextPass, triangulation_ui);
+            );
     }
 }
 
@@ -184,7 +181,7 @@ impl Default for TriangulationState {
         // use_second_map.insert((2, 3));
         // use_second_set.insert((1, 3));
 
-        let mut defaulttags = HashMap::new();
+        let defaulttags = HashMap::new();
         // defaulttags.insert(
         //     4,
         //     TagState {
@@ -371,326 +368,316 @@ fn multilaterate_least_squares(anchors: &[(Vec2, f32)]) -> Option<Vec2> {
 // UI
 // ---------------------------------------------------------------------------
 
+#[derive(SystemParam)]
+pub struct TriangulationUiState<'w, 's> {
+    state: ResMut<'w, TriangulationState>,
+    provider: ResMut<'w, ActiveDistanceProvider>,
+    background: Query<'w, 's, &'static mut Transform, With<BackgroundImage>>,
+}
+
 /// egui window for editing anchor positions, distances, and provider selection.
-fn triangulation_ui(
-    mut contexts: EguiContexts,
-    mut state: ResMut<TriangulationState>,
-    mut provider: ResMut<ActiveDistanceProvider>,
-    mut background: Query<&mut Transform, With<BackgroundImage>>,
-) {
-    let Ok(ctx) = contexts.ctx_mut() else {
-        return;
-    };
-    let ss = state.use_second.clone();
+pub fn lut_ui(ui: &mut Ui, mut params: TriangulationUiState) {
+    ui.checkbox(&mut params.state.use_lut, "Enable Calibration LUT");
+    ui.separator();
 
-    egui::Window::new("Calibration LUT")
-        .default_width(250.0)
-        .show(ctx, |ui| {
-            ui.checkbox(&mut state.use_lut, "Enable Calibration LUT");
-            ui.separator();
-
-            let mut to_remove = None;
-            for (i, sample) in state.lut.iter_mut().enumerate() {
-                ui.horizontal(|ui| {
-                    ui.label("Measured:");
-                    ui.add(egui::DragValue::new(&mut sample.0).speed(0.1));
-                    ui.label("Actual:");
-                    ui.add(egui::DragValue::new(&mut sample.1).speed(0.1));
-                    if ui.button("X").clicked() {
-                        to_remove = Some(i);
-                    }
-                });
-            }
-            if let Some(i) = to_remove {
-                state.lut.remove(i);
-            }
-            if ui.button("Add Sample").clicked() {
-                let last_measured = state.lut.last().map(|s| s.0).unwrap_or(0.0);
-                let last_actual = state.lut.last().map(|s| s.1).unwrap_or(0.0);
-                state.lut.push((last_measured + 1.0, last_actual + 1.0));
-            }
-
-            // Keep it sorted by measured distance
-            if ui.button("Sort").clicked() {
-                state
-                    .lut
-                    .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut to_remove = None;
+    for (i, sample) in params.state.lut.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label("Measured:");
+            ui.add(egui::DragValue::new(&mut sample.0).speed(0.1));
+            ui.label("Actual:");
+            ui.add(egui::DragValue::new(&mut sample.1).speed(0.1));
+            if ui.button("X").clicked() {
+                to_remove = Some(i);
             }
         });
+    }
+    if let Some(i) = to_remove {
+        params.state.lut.remove(i);
+    }
+    if ui.button("Add Sample").clicked() {
+        let last_measured = params.state.lut.last().map(|s| s.0).unwrap_or(0.0);
+        let last_actual = params.state.lut.last().map(|s| s.1).unwrap_or(0.0);
+        params
+            .state
+            .lut
+            .push((last_measured + 1.0, last_actual + 1.0));
+    }
 
-    egui::Window::new("Triangulation")
-        .default_width(300.0)
-        .show(ctx, |ui| {
-            // ----- Provider selector -----
-            ui.heading("Distance Provider");
-            {
-                let current_label = provider.kind.to_string();
-                egui::ComboBox::from_label("Source")
-                    .selected_text(&current_label)
-                    .show_ui(ui, |ui| {
-                        for &kind in &provider.available.clone() {
-                            ui.selectable_value(&mut provider.kind, kind, kind.to_string());
-                        }
-                    });
+    // Keep it sorted by measured distance
+    if ui.button("Sort").clicked() {
+        params
+            .state
+            .lut
+            .sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    }
+}
+pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
+    let ss = params.state.use_second.clone();
+
+    // ----- Provider selector -----
+    ui.heading("Distance Provider");
+    {
+        let current_label = params.provider.kind.to_string();
+        egui::ComboBox::from_label("Source")
+            .selected_text(&current_label)
+            .show_ui(ui, |ui| {
+                for &kind in &params.provider.available.clone() {
+                    ui.selectable_value(&mut params.provider.kind, kind, kind.to_string());
+                }
+            });
+    }
+
+    ui.separator();
+
+    // ----- Anchors (always editable) -----
+    ui.heading("Anchors");
+
+    let mut to_remove = None;
+    let mut anchors_sorted: Vec<_> = params.state.anchors.iter_mut().collect();
+    anchors_sorted.sort_by_key(|(id, _)| **id);
+
+    for (&id, pos) in anchors_sorted {
+        ui.horizontal(|ui| {
+            ui.label(format!("Anchor {} x:", id));
+            ui.add(egui::DragValue::new(&mut pos.x).speed(0.05));
+            ui.label("y:");
+            ui.add(egui::DragValue::new(&mut pos.y).speed(0.05));
+            if ui.button("X").clicked() {
+                to_remove = Some(id);
             }
+        });
+    }
+    if let Some(id) = to_remove {
+        params.state.anchors.remove(&id);
+        for tagstate in params.state.tagstates.values_mut() {
+            tagstate.distances.remove(&id);
+        }
+    }
 
-            ui.separator();
+    if ui.button("Add Anchor").clicked() {
+        let next_id = params.state.anchors.keys().max().copied().unwrap_or(0) + 1;
+        params.state.anchors.insert(next_id, Vec2::new(0.0, 0.0));
+    }
 
-            // ----- Anchors (always editable) -----
-            ui.heading("Anchors");
+    ui.separator();
 
-            let mut to_remove = None;
-            let mut anchors_sorted: Vec<_> = state.anchors.iter_mut().collect();
-            anchors_sorted.sort_by_key(|(id, _)| **id);
+    // ----- Distances -----
+    ui.heading("Distances");
 
-            for (&id, pos) in anchors_sorted {
-                ui.horizontal(|ui| {
-                    ui.label(format!("Anchor {} x:", id));
-                    ui.add(egui::DragValue::new(&mut pos.x).speed(0.05));
-                    ui.label("y:");
-                    ui.add(egui::DragValue::new(&mut pos.y).speed(0.05));
-                    if ui.button("X").clicked() {
-                        to_remove = Some(id);
-                    }
-                });
-            }
-            if let Some(id) = to_remove {
-                state.anchors.remove(&id);
-                for tagstate in state.tagstates.values_mut() {
-                    tagstate.distances.remove(&id);
-                }
-            }
+    let manual = params.provider.kind == DistanceProviderKind::Manual;
 
-            if ui.button("Add Anchor").clicked() {
-                let next_id = state.anchors.keys().max().copied().unwrap_or(0) + 1;
-                state.anchors.insert(next_id, Vec2::new(0.0, 0.0));
-            }
+    let anchor_keys: Vec<_> = params.state.anchors.keys().copied().collect();
+    let anchors_clone = params.state.anchors.clone(); // Clone to avoid multiple borrow issues
+    let use_lut = params.state.use_lut;
+    let lut = params.state.lut.clone();
 
-            ui.separator();
+    for (tag_id, tagstate) in params.state.tagstates.iter_mut() {
+        ui.label(format!(
+            "Tag {}, rate {:.2}/s",
+            tag_id,
+            tagstate.ratemonitor.rate()
+        ));
+        ui.checkbox(&mut tagstate.show_radii, "Show radii");
+        ui.checkbox(&mut tagstate.use_second_solution, "Use second solution");
 
-            // ----- Distances -----
-            ui.heading("Distances");
+        let mut distances_sorted: Vec<_> = tagstate.distances.iter_mut().collect();
+        distances_sorted.sort_by_key(|(id, _)| **id);
 
-            let manual = provider.kind == DistanceProviderKind::Manual;
-
-            let anchor_keys: Vec<_> = state.anchors.keys().copied().collect();
-            let anchors_clone = state.anchors.clone(); // Clone to avoid multiple borrow issues
-            let use_lut = state.use_lut;
-            let lut = state.lut.clone();
-
-            for (tag_id, tagstate) in state.tagstates.iter_mut() {
-                ui.label(format!(
-                    "Tag {}, rate {:.2}/s",
-                    tag_id,
-                    tagstate.ratemonitor.rate()
-                ));
-                ui.checkbox(&mut tagstate.show_radii, "Show radii");
-                ui.checkbox(&mut tagstate.use_second_solution, "Use second solution");
-
-                let mut distances_sorted: Vec<_> = tagstate.distances.iter_mut().collect();
-                distances_sorted.sort_by_key(|(id, _)| **id);
-
-                for (&anchor_id, (opt_dist, _)) in distances_sorted {
-                    ui.horizontal(|ui| {
-                        ui.label(format!("d(Anchor {} -> P):", anchor_id));
-                        if manual {
-                            let mut dist = opt_dist.unwrap_or(0.0);
-                            let response = ui.add(
-                                egui::DragValue::new(&mut dist)
-                                    .speed(0.05)
-                                    .range(0.0..=f32::MAX),
-                            );
-                            if response.changed() {
-                                *opt_dist = Some(dist);
-                            }
-                        } else {
-                            if let Some(dist) = opt_dist {
-                                ui.label(format!("{:.4}", dist));
-                            } else {
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(255, 100, 100),
-                                    "(out of range)",
-                                );
-                            }
-                        }
-                    });
-                }
-
-                // For manual mode, allow adding distances for newly added anchors
-                if manual {
-                    for &anchor_id in &anchor_keys {
-                        if !tagstate.distances.contains_key(&anchor_id) {
-                            if ui
-                                .button(format!("Add distance for Anchor {}", anchor_id))
-                                .clicked()
-                            {
-                                tagstate.distances.insert(anchor_id, (Some(0.0), 0));
-                            }
-                        }
-                    }
-                }
-
-                // ----- Solve -----
-                let dtr = 25.;
-
-                // Collect available data for solving
-                let mut valid_measurements = Vec::new();
-
-                let anchors_inrange: Vec<usize> = tagstate
-                    .distances
-                    .iter()
-                    .filter_map(|(k, v)| {
-                        if let Some(_) = v.0 {
-                            return Some(*k);
-                        }
-                        return None;
-                    })
-                    .collect();
-
-                let mut avgts: i64 = 0;
-                let mut nts: u32 = 0;
-                for anchorid in anchors_inrange.iter() {
-                    avgts += tagstate.distances.get(anchorid).unwrap_or(&(None, 1)).1 as i64;
-                    avgts += tagstate.lastdistances.get(anchorid).unwrap_or(&(None, 0)).1 as i64;
-                    nts += 2;
-                }
-
-                let mut evaldists: HashMap<usize, Option<f32>> = HashMap::new();
-                if nts > 0 {
-                    avgts /= nts as i64;
-
-                    for anchor_id in anchors_inrange.iter() {
-                        let (dist, ts) = tagstate.distances.get(anchor_id).unwrap_or(&(None, 1));
-                        let (odist, ots) =
-                            tagstate.lastdistances.get(anchor_id).unwrap_or(&(None, 0));
-
-                        let evaldist = odist.unwrap_or(0.0)
-                            + (dist.unwrap_or(0.0) - odist.unwrap_or(0.0))
-                                / (*ts as f32 - *ots as f32)
-                                * (avgts as f32 - *ots as f32);
-                        evaldists.insert(*anchor_id, Some(evaldist));
-                        // println!(
-                        //     "ts {} - {} dist {} {} = {}",
-                        //     ots,
-                        //     ts,
-                        //     odist.unwrap_or(-1.0),
-                        //     dist.unwrap_or(-1.0),
-                        //     evaldist
-                        // );
-                    }
-                } else {
-                    // println!("cant find avgts")
-                }
-
-                for (&anchor_id, &opt_dist) in evaldists.iter() {
-                    if let Some(mut dist) = opt_dist {
-                        if use_lut {
-                            dist = apply_lut(dist, &lut);
-                        }
-                        if let Some(&pos) = anchors_clone.get(&anchor_id) {
-                            valid_measurements.push((pos, dist));
-                        }
-                    }
-                }
-
-                if valid_measurements.len() == 2 {
-                    tagstate.solutions = trilaterate_2d(
-                        valid_measurements[0].0,
-                        valid_measurements[0].1,
-                        valid_measurements[1].0,
-                        valid_measurements[1].1,
-                    );
-
-                    let anchorsinrange: Vec<usize> = tagstate
-                        .distances
-                        .iter()
-                        .filter_map(|(&k, v)| v.0.map(|_| k))
-                        .collect();
-
-                    let sorted_tuple = (anchorsinrange.len() == 2).then(|| {
-                        let (a, b) = (anchorsinrange[0], anchorsinrange[1]);
-                        (a.min(b), a.max(b))
-                    });
-
-                    tagstate.estimated_position = if let Some(uskey) = sorted_tuple
-                        && ss.contains(&uskey)
-                    {
-                        tagstate.solutions.map(|s| s.1)
-                    } else {
-                        tagstate.solutions.map(|s| s.0)
-                    };
-                } else if valid_measurements.len() >= 2 {
-                    tagstate.solutions = None;
-                    tagstate.estimated_position = multilaterate_least_squares(&valid_measurements);
-                } else {
-                    tagstate.solutions = None;
-                    tagstate.estimated_position = None;
-                }
-
-                if let Some(pos) = tagstate.estimated_position {
-                    ui.label(format!("Estimated Position: ({:.3}, {:.3})", pos.x, pos.y));
-                } else {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(255, 100, 100),
-                        "Not enough data or no intersection",
-                    );
-                }
-
-                ui.separator();
-            }
-
-            ui.separator();
-            ui.heading("Display");
-
+        for (&anchor_id, (opt_dist, _)) in distances_sorted {
             ui.horizontal(|ui| {
-                ui.label("Scale (px/unit):");
-                ui.add(
-                    egui::DragValue::new(&mut state.scale)
-                        .speed(1.0)
-                        .range(1.0..=100.0),
-                );
+                ui.label(format!("d(Anchor {} -> P):", anchor_id));
+                if manual {
+                    let mut dist = opt_dist.unwrap_or(0.0);
+                    let response = ui.add(
+                        egui::DragValue::new(&mut dist)
+                            .speed(0.05)
+                            .range(0.0..=f32::MAX),
+                    );
+                    if response.changed() {
+                        *opt_dist = Some(dist);
+                    }
+                } else {
+                    if let Some(dist) = opt_dist {
+                        ui.label(format!("{:.4}", dist));
+                    } else {
+                        ui.colored_label(egui::Color32::from_rgb(255, 100, 100), "(out of range)");
+                    }
+                }
+            });
+        }
+
+        // For manual mode, allow adding distances for newly added anchors
+        if manual {
+            for &anchor_id in &anchor_keys {
+                if !tagstate.distances.contains_key(&anchor_id) {
+                    if ui
+                        .button(format!("Add distance for Anchor {}", anchor_id))
+                        .clicked()
+                    {
+                        tagstate.distances.insert(anchor_id, (Some(0.0), 0));
+                    }
+                }
+            }
+        }
+
+        // ----- Solve -----
+
+        // Collect available data for solving
+        let mut valid_measurements = Vec::new();
+
+        let anchors_inrange: Vec<usize> = tagstate
+            .distances
+            .iter()
+            .filter_map(|(k, v)| {
+                if let Some(_) = v.0 {
+                    return Some(*k);
+                }
+                return None;
+            })
+            .collect();
+
+        let mut avgts: i64 = 0;
+        let mut nts: u32 = 0;
+        for anchorid in anchors_inrange.iter() {
+            avgts += tagstate.distances.get(anchorid).unwrap_or(&(None, 1)).1 as i64;
+            avgts += tagstate.lastdistances.get(anchorid).unwrap_or(&(None, 0)).1 as i64;
+            nts += 2;
+        }
+
+        let mut evaldists: HashMap<usize, Option<f32>> = HashMap::new();
+        if nts > 0 {
+            avgts /= nts as i64;
+
+            for anchor_id in anchors_inrange.iter() {
+                let (dist, ts) = tagstate.distances.get(anchor_id).unwrap_or(&(None, 1));
+                let (odist, ots) = tagstate.lastdistances.get(anchor_id).unwrap_or(&(None, 0));
+
+                let evaldist = odist.unwrap_or(0.0)
+                    + (dist.unwrap_or(0.0) - odist.unwrap_or(0.0)) / (*ts as f32 - *ots as f32)
+                        * (avgts as f32 - *ots as f32);
+                evaldists.insert(*anchor_id, Some(evaldist));
+                // println!(
+                //     "ts {} - {} dist {} {} = {}",
+                //     ots,
+                //     ts,
+                //     odist.unwrap_or(-1.0),
+                //     dist.unwrap_or(-1.0),
+                //     evaldist
+                // );
+            }
+        } else {
+            // println!("cant find avgts")
+        }
+
+        for (&anchor_id, &opt_dist) in evaldists.iter() {
+            if let Some(mut dist) = opt_dist {
+                if use_lut {
+                    dist = apply_lut(dist, &lut);
+                }
+                if let Some(&pos) = anchors_clone.get(&anchor_id) {
+                    valid_measurements.push((pos, dist));
+                }
+            }
+        }
+
+        if valid_measurements.len() == 2 {
+            tagstate.solutions = trilaterate_2d(
+                valid_measurements[0].0,
+                valid_measurements[0].1,
+                valid_measurements[1].0,
+                valid_measurements[1].1,
+            );
+
+            let anchorsinrange: Vec<usize> = tagstate
+                .distances
+                .iter()
+                .filter_map(|(&k, v)| v.0.map(|_| k))
+                .collect();
+
+            let sorted_tuple = (anchorsinrange.len() == 2).then(|| {
+                let (a, b) = (anchorsinrange[0], anchorsinrange[1]);
+                (a.min(b), a.max(b))
             });
 
-            ui.checkbox(&mut state.show_extradebug, "Show debug UI");
+            tagstate.estimated_position = if let Some(uskey) = sorted_tuple
+                && ss.contains(&uskey)
+            {
+                tagstate.solutions.map(|s| s.1)
+            } else {
+                tagstate.solutions.map(|s| s.0)
+            };
+        } else if valid_measurements.len() >= 2 {
+            tagstate.solutions = None;
+            tagstate.estimated_position = multilaterate_least_squares(&valid_measurements);
+        } else {
+            tagstate.solutions = None;
+            tagstate.estimated_position = None;
+        }
 
-            if ui.button("Auto scale").clicked() {
-                // Maximum distance between 2 points for auto scaling
-                let mut maxdist = 1.0_f32; // Fallback
-                for (&id1, &a1) in state.anchors.iter() {
-                    for (&id2, &a2) in state.anchors.iter() {
-                        if id1 != id2 {
-                            maxdist = maxdist.max((a1 - a2).length());
-                        }
-                    }
+        if let Some(pos) = tagstate.estimated_position {
+            ui.label(format!("Estimated Position: ({:.3}, {:.3})", pos.x, pos.y));
+        } else {
+            ui.colored_label(
+                egui::Color32::from_rgb(255, 100, 100),
+                "Not enough data or no intersection",
+            );
+        }
+
+        ui.separator();
+    }
+
+    ui.separator();
+    ui.heading("Display");
+
+    ui.horizontal(|ui| {
+        ui.label("Scale (px/unit):");
+        ui.add(
+            egui::DragValue::new(&mut params.state.scale)
+                .speed(1.0)
+                .range(1.0..=100.0),
+        );
+    });
+
+    ui.checkbox(&mut params.state.show_extradebug, "Show debug UI");
+
+    if ui.button("Auto scale").clicked() {
+        // Maximum distance between 2 points for auto scaling
+        let mut maxdist = 1.0_f32; // Fallback
+        for (&id1, &a1) in params.state.anchors.iter() {
+            for (&id2, &a2) in params.state.anchors.iter() {
+                if id1 != id2 {
+                    maxdist = maxdist.max((a1 - a2).length());
                 }
+            }
+        }
 
-                for (_tag_id, tagstate) in &state.tagstates {
-                    if let Some(pos) = tagstate.estimated_position {
-                        for (&_id, &a) in state.anchors.iter() {
-                            maxdist = maxdist.max((a - pos).length());
-                        }
-                    }
+        for (_tag_id, tagstate) in &params.state.tagstates {
+            if let Some(pos) = tagstate.estimated_position {
+                for (&_id, &a) in params.state.anchors.iter() {
+                    maxdist = maxdist.max((a - pos).length());
                 }
-
-                state.scale = TriangulationState::default().scale / (maxdist / 2.0);
             }
+        }
 
-            for (mut transform) in &mut background {
-                // background position and scale
-                ui.horizontal(|ui| {
-                    ui.label(format!("Background:"));
-                    ui.add(egui::DragValue::new(&mut transform.translation.x).speed(0.05));
-                    ui.label("y:");
-                    ui.add(egui::DragValue::new(&mut transform.translation.y).speed(0.05));
-                    ui.label("scale:");
+        params.state.scale = TriangulationState::default().scale / (maxdist / 2.0);
+    }
 
-                    ui.add(egui::DragValue::new(&mut state.bgscale).speed(0.001));
-                    transform.scale.x = state.bgscale;
-                    transform.scale.y = state.bgscale;
-                    transform.scale.z = state.bgscale;
-                });
-            }
+    for mut transform in &mut params.background {
+        // background position and scale
+        ui.horizontal(|ui| {
+            ui.label(format!("Background:"));
+            ui.add(egui::DragValue::new(&mut transform.translation.x).speed(0.05));
+            ui.label("y:");
+            ui.add(egui::DragValue::new(&mut transform.translation.y).speed(0.05));
+            ui.label("scale:");
+
+            ui.add(egui::DragValue::new(&mut params.state.bgscale).speed(0.001));
+            transform.scale.x = params.state.bgscale;
+            transform.scale.y = params.state.bgscale;
+            transform.scale.z = params.state.bgscale;
         });
+    }
 }
 
 #[derive(Component)]

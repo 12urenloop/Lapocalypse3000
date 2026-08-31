@@ -2,7 +2,7 @@
 #define UWB_DEBUG true
 
 #include <Arduino.h>
-#include <connectivity/udp_reporter.hpp>
+#include <connectivity/espnow_reporter.hpp>
 // #include <connectivity/mqtt_reporter.hpp>
 // #include <connectivity/debugserver.hpp>
 #include <types/taginfo.hpp>
@@ -35,7 +35,8 @@ void setup()
 
     // meshClock.begin();
     // mqtt_setup();
-    udp_setup();
+    // udp_setup();
+    setup_espnow();
 }
 
 

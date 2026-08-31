@@ -7,6 +7,7 @@ mod ffmpeg;
 mod log_distance_provider;
 mod mqtt_distance_provider;
 mod rate_monitor;
+mod serial_distance_provider;
 mod simulated_distance_provider;
 mod triangulation;
 mod udp_distance_provider;
@@ -21,6 +22,7 @@ use ffmpeg::FfmpegPlugin;
 use mqtt_distance_provider::MqttDistanceProviderPlugin;
 use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 use serde::Deserialize;
+use serial_distance_provider::SerialDistanceProviderPlugin;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use triangulation::TriangulationPlugin;
@@ -61,6 +63,7 @@ fn main() {
         .add_plugins(log_distance_provider::LogDistanceProviderPlugin)
         .add_plugins(SimulatedDistanceProviderPlugin)
         .add_plugins(UdpDistanceProviderPlugin)
+        .add_plugins(SerialDistanceProviderPlugin)
         .add_plugins(UiPlugin)
         // .add_plugins(AmqpPositionPublisherPlugin)
         // .insert_resource(MqttReceiver { messages })

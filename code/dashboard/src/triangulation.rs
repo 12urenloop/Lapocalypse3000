@@ -34,6 +34,7 @@ pub enum DistanceProviderKind {
     LogFiles,
     Simulated,
     Udp,
+    Serial,
 }
 
 impl std::fmt::Display for DistanceProviderKind {
@@ -45,6 +46,7 @@ impl std::fmt::Display for DistanceProviderKind {
             Self::LogFiles => write!(f, "Log Files"),
             Self::Simulated => write!(f, "Simulated"),
             Self::Udp => write!(f, "UDP"),
+            Self::Serial => write!(f, "Serial"),
         }
     }
 }

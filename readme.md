@@ -2,6 +2,8 @@
 
 ### Developing a multi tag UWB realtime tracking system around the Qorvo DW3000 platform for potential use in future 12Urenloop editions.
 
+## Read the [blogpost](https://zeus.gent/blog/25-26/12urenloop-uwb/)!
+
 ## Goals
 - [x] Ranging between 2 modules
 - [x] Improving range (ideally ~30 meters)
@@ -14,8 +16,8 @@
     - [ ] Calibration of positioning
     - [ ] Timing / power measurements
     - [ ] precision / reliability / throughput / latency measurements
-- [ ] Integrate into batons
-- [ ] Integrate into stations
+- [x] Integrate into batons
+- [x] Integrate into stations
 - [ ] Lap counting/timing/tracking system
 
 

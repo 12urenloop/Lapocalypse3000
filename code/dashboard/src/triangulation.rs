@@ -1,7 +1,10 @@
 use std::{collections::HashSet, time::Duration};
 
-use crate::rate_monitor::RateMonitor;
-use bevy::{ecs::system::SystemParam, platform::collections::HashMap, prelude::*};
+use crate::{rate_monitor::RateMonitor, ui::set_gizmo_renderlayer};
+use bevy::{
+    camera::visibility::RenderLayers, ecs::system::SystemParam, platform::collections::HashMap,
+    prelude::*,
+};
 use bevy_egui::egui::{self, Ui};
 
 // ---------------------------------------------------------------------------
@@ -685,7 +688,11 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
 #[derive(Component)]
 struct BackgroundImage; // Component for overlayed background image (map or sattelite pic of location)
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut gizmoconfig: ResMut<GizmoConfigStore>,
+) {
     commands.spawn((
         // Sprite::from_image(asset_server.load("parking.png")),
         Sprite::from_image(asset_server.load("plein.png")),
@@ -700,7 +707,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 /// Draw anchors, distance circles, and the estimated position using gizmos.
-fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
+fn draw_triangulation(
+    state: Res<TriangulationState>,
+    mut params: ParamSet<(ResMut<GizmoConfigStore>, Gizmos)>,
+) {
+    set_gizmo_renderlayer(1, params.p0());
+
+    let mut gizmos = params.p1();
     let s = state.scale;
 
     // --- Grid / origin marker ---
@@ -716,9 +729,15 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
         Color::srgba(0.3, 0.3, 0.3, 0.5),
     );
 
+    let mut avg_pos = Vec2::new(0.0, 0.0);
+    for (&id, &pos) in state.anchors.iter() {
+        avg_pos += pos;
+    }
+    avg_pos /= state.anchors.len() as f32;
+
     // --- Anchors ---
     for (&id, &pos) in state.anchors.iter() {
-        let screen_pos = pos * s;
+        let screen_pos = (pos - avg_pos) * s;
         // Generate a pseudo-random color based on ID
         let hue = ((id as f32) * 137.5) % 360.0;
         let color = Color::hsl(hue, 0.8, 0.5);
@@ -747,7 +766,7 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
             for (&anchor_id, &opt_dist) in tagstate.distances.iter() {
                 if let (Some(dist), _) = opt_dist {
                     if let Some(&anchor_pos) = state.anchors.get(&anchor_id) {
-                        let anchor_screen = anchor_pos * s;
+                        let anchor_screen = (anchor_pos - avg_pos) * s;
                         let hue = ((anchor_id as f32) * 137.5) % 360.0;
                         let color = Color::hsla(hue, 0.8, 0.5, 0.35);
                         gizmos.circle_2d(anchor_screen, dist * s, color);
@@ -761,8 +780,8 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
         // --- Solutions ---
         // For exactly 2 anchors we might have 2 exact solutions, dim one if we want
         if let Some((p1, p2)) = tagstate.solutions {
-            let p1_screen = p1 * s;
-            let p2_screen = p2 * s;
+            let p1_screen = (p1 - avg_pos) * s;
+            let p2_screen = (p2 - avg_pos) * s;
 
             let (_chosen_screen, other_screen) = if tagstate.use_second_solution {
                 (p2_screen, p1_screen)
@@ -780,7 +799,7 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos) {
 
         // for one solution (>=3 anchors in range)
         if let Some(pos) = showpos {
-            let chosen_screen = pos * s;
+            let chosen_screen = (pos - avg_pos) * s;
             let hue = (((tag_id + 4) as f32) * 137.5) % 360.0;
             let color = Color::hsla(hue, 0.8, 0.5, 0.5);
             // Chosen estimated position (yellow)

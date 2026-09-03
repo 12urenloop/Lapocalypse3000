@@ -45,6 +45,7 @@ bevy = { version = "0.19.1", default-features = false, features = [
     "dynamic_linking",
     "hotpatching"
 ] }
+serde_yaml = "0.9.34"
 
 # [dependencies.bevy_metrics_dashboard]
 # version = "0.8.0"

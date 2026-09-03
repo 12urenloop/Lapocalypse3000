@@ -1,6 +1,8 @@
-use crate::deformable_image::DeformableImage;
+use crate::deformable_image::{self, DeformableImage};
 use crate::ffmpeg::{VideoResource, make_video};
 use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind};
+use bevy::camera::RenderTarget;
+use bevy::camera::visibility::RenderLayers;
 use bevy::ecs::system::SystemParam;
 use bevy::render::render_resource::TextureFormat;
 use bevy::{platform::collections::HashMap, prelude::*};
@@ -73,17 +75,44 @@ fn setup_log_provider(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     provider.available.push(DistanceProviderKind::LogFiles);
+
     let image = Image::new_target_texture(
         1920,
         1080,
         TextureFormat::Rgba8Unorm,
         Some(TextureFormat::Rgba8UnormSrgb),
     );
-
+    let first_pass_layer = RenderLayers::layer(1);
     let image_handle = images.add(image);
+    let video_handle = images.add(Image::new_target_texture(
+        1920,
+        1080,
+        TextureFormat::Rgba8Unorm,
+        Some(TextureFormat::Rgba8UnormSrgb),
+    ));
+
+    commands.spawn((
+        Camera2d::default(),
+        Camera {
+            // render before the "main pass" camera
+            order: -1,
+            clear_color: Color::NONE.into(),
+            ..default()
+        },
+        RenderTarget::Image(image_handle.clone().into()),
+        first_pass_layer.clone(),
+    ));
+
+    let border = meshes.add(Rectangle::new(1900.0, 1060.0).to_ring(20.0));
+
+    commands.spawn((
+        Mesh2d(border),
+        MeshMaterial2d(materials.add(Color::WHITE)),
+        first_pass_layer,
+    ));
 
     let (deformable, mesh_handle) =
-        DeformableImage::new_rect(Vec2::new(19.2, 10.8), 16, &mut meshes);
+        DeformableImage::new_rect(Vec2::new(192.0, 108.0), 16, &mut meshes);
 
     let material_handle = materials.add(ColorMaterial {
         texture: Some(image_handle.clone()),
@@ -91,13 +120,18 @@ fn setup_log_provider(
     });
 
     commands.spawn((
+        Sprite::from_image(video_handle.clone()),
+        Transform::default(),
+        VideoSprite {
+            image: video_handle,
+        },
+    ));
+
+    commands.spawn((
         Mesh2d(mesh_handle),
         MeshMaterial2d(material_handle),
         Transform::default(),
         deformable,
-        VideoSprite {
-            image: image_handle,
-        },
     ));
 }
 
@@ -237,16 +271,8 @@ pub struct LogDistanceUiState<'w, 's> {
     provider: Res<'w, ActiveDistanceProvider>,
     _images: ResMut<'w, Assets<Image>>,
     video_resource: NonSendMut<'w, VideoResource>,
-    videosprite: Query<
-        'w,
-        's,
-        (
-            Entity,
-            &'static mut Transform,
-            &'static VideoSprite,
-            Option<&'static mut DeformableImage>,
-        ),
-    >,
+    videosprite: Query<'w, 's, (Entity, &'static mut Transform, &'static VideoSprite)>,
+    deformable: Query<'w, 's, &'static mut DeformableImage>,
 }
 
 pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDistanceUiState) {
@@ -290,7 +316,7 @@ pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDist
 
     ui.separator();
 
-    if let Ok((_, mut transform, _, opt_deformable)) = params.videosprite.single_mut() {
+    if let Ok((_, mut transform, _)) = params.videosprite.single_mut() {
         ui.separator();
         ui.label("Video Sprite Transform");
 
@@ -351,21 +377,16 @@ pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDist
             changed |= ui
                 .add(egui::DragValue::new(&mut scale.x).speed(0.01).prefix("x: "))
                 .changed();
-            changed |= ui
-                .add(egui::DragValue::new(&mut scale.y).speed(0.01).prefix("y: "))
-                .changed();
-            changed |= ui
-                .add(egui::DragValue::new(&mut scale.z).speed(0.01).prefix("z: "))
-                .changed();
         });
 
         if changed {
             transform.translation = position;
             transform.rotation = Quat::from_euler(EulerRot::XYZ, rot_x, rot_y, rot_z);
+            scale.y = scale.x;
             transform.scale = scale;
         }
 
-        if let Some(mut deformable) = opt_deformable {
+        if let Ok(mut deformable) = params.deformable.single_mut() {
             ui.separator();
             ui.label("4-Corner Image Deformation");
             ui.checkbox(&mut deformable.enabled, "Enable Drag Handles Gizmo");
@@ -434,7 +455,7 @@ pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDist
     });
 
     let mut time_f64 = params.state.current_time_ms as f64;
-    ui.spacing_mut().slider_width = 700.0;
+    ui.spacing_mut().slider_width = 300.0;
     let slider = egui::Slider::new(&mut time_f64, 0.0..=params.state.max_time_ms as f64).text("ms");
     if ui.add(slider).changed() {
         params.state.current_time_ms = time_f64 as u64;

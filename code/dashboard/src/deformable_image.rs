@@ -1,8 +1,12 @@
 use bevy::asset::RenderAssetUsages;
+use bevy::camera::visibility::RenderLayers;
 use bevy::mesh::Indices;
 use bevy::prelude::*;
 use bevy::render::render_resource::PrimitiveTopology;
 use bevy_egui::EguiContexts;
+
+use crate::MainCamera;
+use crate::ui::set_gizmo_renderlayer;
 
 /// Component attached to entities whose 2D image/mesh can be deformed, scaled, and rotated
 /// by dragging its 4 corners.
@@ -86,16 +90,15 @@ pub struct DeformableImagePlugin;
 
 impl Plugin for DeformableImagePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CornerDragState>()
-            .add_systems(
-                Update,
-                (
-                    handle_corner_drag,
-                    update_deformable_mesh,
-                    draw_corner_gizmos,
-                )
-                    .chain(),
-            );
+        app.init_resource::<CornerDragState>().add_systems(
+            Update,
+            (
+                handle_corner_drag,
+                update_deformable_mesh,
+                // draw_corner_gizmos,
+            )
+                .chain(),
+        );
     }
 }
 
@@ -206,7 +209,7 @@ fn update_deformable_mesh(
 fn handle_corner_drag(
     mut drag_state: ResMut<CornerDragState>,
     mut deformable_query: Query<(Entity, &mut DeformableImage, &GlobalTransform)>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     windows: Query<&Window>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut egui_contexts: EguiContexts,
@@ -233,8 +236,7 @@ fn handle_corner_drag(
     };
 
     // Handle active drag in progress
-    if let (Some(entity), Some(corner_idx)) =
-        (drag_state.active_entity, drag_state.dragged_corner)
+    if let (Some(entity), Some(corner_idx)) = (drag_state.active_entity, drag_state.dragged_corner)
     {
         if mouse_button.pressed(MouseButton::Left) {
             if let Ok((_, mut deformable, entity_gt)) = deformable_query.get_mut(entity) {
@@ -293,18 +295,30 @@ fn handle_corner_drag(
 fn draw_corner_gizmos(
     drag_state: Res<CornerDragState>,
     deformable_query: Query<(Entity, &DeformableImage, &GlobalTransform)>,
-    mut gizmos: Gizmos,
+    mut params: ParamSet<(ResMut<GizmoConfigStore>, Gizmos)>,
 ) {
+    set_gizmo_renderlayer(1, params.p0());
+
+    let mut gizmos = params.p1();
+
     for (entity, deformable, entity_gt) in deformable_query.iter() {
         if !deformable.enabled {
             continue;
         }
 
         let corners_world: [Vec2; 4] = [
-            entity_gt.transform_point(deformable.corners[0].extend(0.0)).xy(),
-            entity_gt.transform_point(deformable.corners[1].extend(0.0)).xy(),
-            entity_gt.transform_point(deformable.corners[2].extend(0.0)).xy(),
-            entity_gt.transform_point(deformable.corners[3].extend(0.0)).xy(),
+            entity_gt
+                .transform_point(deformable.corners[0].extend(0.0))
+                .xy(),
+            entity_gt
+                .transform_point(deformable.corners[1].extend(0.0))
+                .xy(),
+            entity_gt
+                .transform_point(deformable.corners[2].extend(0.0))
+                .xy(),
+            entity_gt
+                .transform_point(deformable.corners[3].extend(0.0))
+                .xy(),
         ];
 
         let frame_color = Color::srgba(0.2, 0.8, 1.0, 0.6);
@@ -317,8 +331,8 @@ fn draw_corner_gizmos(
 
         // Draw corner handle circles
         for (idx, &corner_world) in corners_world.iter().enumerate() {
-            let is_dragged = drag_state.active_entity == Some(entity)
-                && drag_state.dragged_corner == Some(idx);
+            let is_dragged =
+                drag_state.active_entity == Some(entity) && drag_state.dragged_corner == Some(idx);
             let is_hovered = drag_state.hovered_corner == Some((entity, idx));
 
             let (color, radius) = if is_dragged {

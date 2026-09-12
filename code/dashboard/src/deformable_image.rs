@@ -9,6 +9,26 @@ use crate::MainCamera;
 use crate::triangulation::{TriangulationState, TriangulationUiState};
 use crate::ui::{DefaultGizmos, set_gizmo_renderlayer};
 
+/// Specifies which corners are interactive for dragging.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Reflect)]
+pub enum CornerDragMode {
+    /// Drag the (inner) scaled corners. The underlying image corners are updated accordingly.
+    #[default]
+    Scaled,
+    /// Drag the original full-size image corners directly.
+    Original,
+    /// Allow dragging either the inner scaled corners or the outer original corners,
+    /// depending on which handle is clicked/hovered.
+    Both,
+}
+
+/// Identifies whether a handle belongs to the original (outer) or scaled (inner) corners.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
+pub enum HandleKind {
+    Original,
+    Scaled,
+}
+
 /// Component attached to entities whose 2D image/mesh can be deformed, scaled, and rotated
 /// by dragging its 4 corners.
 #[derive(Component, Debug, Clone)]
@@ -31,6 +51,9 @@ pub struct DeformableImage {
     pub size: Vec2,
     /// Whether interaction and gizmos are active
     pub enabled: bool,
+    /// Optional corner dragging mode override for this entity.
+    /// If None, the global `CornerDragState::drag_mode` is used.
+    pub drag_mode: Option<CornerDragMode>,
 }
 
 #[derive(Default, Reflect, GizmoConfigGroup)]
@@ -63,6 +86,7 @@ impl DeformableImage {
             handle_radius: 20.0,
             size,
             enabled: true,
+            drag_mode: None,
         };
 
         (deformable, mesh_handle)
@@ -83,11 +107,23 @@ impl DeformableImage {
 }
 
 /// Tracks the mouse interaction state for corner dragging.
-#[derive(Resource, Default, Debug)]
+#[derive(Resource, Debug)]
 pub struct CornerDragState {
     pub active_entity: Option<Entity>,
-    pub dragged_corner: Option<usize>,
-    pub hovered_corner: Option<(Entity, usize)>,
+    pub dragged_corner: Option<(usize, HandleKind)>,
+    pub hovered_corner: Option<(Entity, usize, HandleKind)>,
+    pub drag_mode: CornerDragMode,
+}
+
+impl Default for CornerDragState {
+    fn default() -> Self {
+        Self {
+            active_entity: None,
+            dragged_corner: None,
+            hovered_corner: None,
+            drag_mode: CornerDragMode::Scaled,
+        }
+    }
 }
 
 pub struct DeformableImagePlugin;
@@ -217,6 +253,67 @@ fn update_deformable_mesh(
     }
 }
 
+/// Computes the 4 corners scaled toward `scale_center(corners)` by `scale`.
+pub fn compute_scaled_corners(corners: [Vec2; 4], scale: f32) -> [Vec2; 4] {
+    let scalecenter = scale_center(corners);
+    [
+        corners[0] * scale + scalecenter * (1.0 - scale),
+        corners[1] * scale + scalecenter * (1.0 - scale),
+        corners[2] * scale + scalecenter * (1.0 - scale),
+        corners[3] * scale + scalecenter * (1.0 - scale),
+    ]
+}
+
+/// Solves for the original quad corner position `corners[corner_idx]` such that
+/// scaling the quad toward `scale_center(corners)` by `scale` puts the scaled
+/// corner at `target`.
+pub fn solve_corner_for_scaled_target(
+    mut corners: [Vec2; 4],
+    corner_idx: usize,
+    scale: f32,
+    target: Vec2,
+) -> Vec2 {
+    let scale = scale.clamp(0.01, 10.0);
+    if (scale - 1.0).abs() < 1e-6 {
+        return target;
+    }
+
+    let base_gamma = 1.0 / (scale + (1.0 - scale) * 0.25);
+    let mut c = corners[corner_idx];
+    let mut best_c = c;
+    let mut best_err = f32::MAX;
+
+    for _ in 0..40 {
+        corners[corner_idx] = c;
+        let current = compute_scaled_corners(corners, scale)[corner_idx];
+        let res = target - current;
+        let err = res.length();
+        if err < best_err {
+            best_err = err;
+            best_c = c;
+        }
+        if err < 1e-4 {
+            return c;
+        }
+
+        let mut step_gamma = base_gamma;
+        let mut next_c = c + res * step_gamma;
+        corners[corner_idx] = next_c;
+        let mut next_err = (target - compute_scaled_corners(corners, scale)[corner_idx]).length();
+
+        while next_err > err && step_gamma > base_gamma * 0.05 {
+            step_gamma *= 0.5;
+            next_c = c + res * step_gamma;
+            corners[corner_idx] = next_c;
+            next_err = (target - compute_scaled_corners(corners, scale)[corner_idx]).length();
+        }
+
+        c = next_c;
+    }
+
+    best_c
+}
+
 /// System for mouse hover hit testing and corner dragging.
 fn handle_corner_drag(
     mut drag_state: ResMut<CornerDragState>,
@@ -225,6 +322,7 @@ fn handle_corner_drag(
     windows: Query<&Window>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut egui_contexts: EguiContexts,
+    tristate: Option<Res<TriangulationState>>,
 ) {
     let Ok(window) = windows.single() else {
         return;
@@ -247,8 +345,11 @@ fn handle_corner_drag(
         return;
     };
 
+    let scale = tristate.as_ref().map_or(1.0, |t| t.deformable_scale);
+
     // Handle active drag in progress
-    if let (Some(entity), Some(corner_idx)) = (drag_state.active_entity, drag_state.dragged_corner)
+    if let (Some(entity), Some((corner_idx, handle_kind))) =
+        (drag_state.active_entity, drag_state.dragged_corner)
     {
         if mouse_button.pressed(MouseButton::Left) {
             if let Ok((_, mut deformable, entity_gt)) = deformable_query.get_mut(entity) {
@@ -256,7 +357,19 @@ fn handle_corner_drag(
                 let inv_affine = entity_gt.affine().inverse();
                 let local_pos = inv_affine.transform_point3(world_pos.extend(0.0)).xy();
 
-                deformable.corners[corner_idx] = local_pos;
+                match handle_kind {
+                    HandleKind::Original => {
+                        deformable.corners[corner_idx] = local_pos;
+                    }
+                    HandleKind::Scaled => {
+                        deformable.corners[corner_idx] = solve_corner_for_scaled_target(
+                            deformable.corners,
+                            corner_idx,
+                            scale,
+                            local_pos,
+                        );
+                    }
+                }
                 deformable.is_dirty = true;
             }
             return;
@@ -273,65 +386,77 @@ fn handle_corner_drag(
     }
 
     // Hit test corners to find hovered handle
-    let mut closest_hover: Option<(Entity, usize, f32)> = None;
+    let mut closest_hover: Option<(Entity, usize, HandleKind, f32)> = None;
 
     for (entity, deformable, entity_gt) in deformable_query.iter() {
         if !deformable.enabled {
             continue;
         }
 
-        for (idx, &corner_local) in deformable.corners.iter().enumerate() {
-            let corner_world = entity_gt.transform_point(corner_local.extend(0.0)).xy();
-            let dist = corner_world.distance(world_pos);
+        let mode = deformable.drag_mode.unwrap_or(drag_state.drag_mode);
 
-            if dist <= deformable.handle_radius {
-                if closest_hover.map_or(true, |(_, _, min_d)| dist < min_d) {
-                    closest_hover = Some((entity, idx, dist));
+        let corners_world_orig: [Vec2; 4] = [
+            entity_gt.transform_point(deformable.corners[0].extend(0.0)).xy(),
+            entity_gt.transform_point(deformable.corners[1].extend(0.0)).xy(),
+            entity_gt.transform_point(deformable.corners[2].extend(0.0)).xy(),
+            entity_gt.transform_point(deformable.corners[3].extend(0.0)).xy(),
+        ];
+
+        let corners_world_scaled = compute_scaled_corners(corners_world_orig, scale);
+
+        // Check scaled corners if mode is Scaled or Both
+        if matches!(mode, CornerDragMode::Scaled | CornerDragMode::Both) {
+            for (idx, &corner_world) in corners_world_scaled.iter().enumerate() {
+                let dist = corner_world.distance(world_pos);
+                if dist <= deformable.handle_radius {
+                    if closest_hover.map_or(true, |(_, _, _, min_d)| dist < min_d) {
+                        closest_hover = Some((entity, idx, HandleKind::Scaled, dist));
+                    }
+                }
+            }
+        }
+
+        // Check original corners if mode is Original or Both
+        if matches!(mode, CornerDragMode::Original | CornerDragMode::Both) {
+            for (idx, &corner_world) in corners_world_orig.iter().enumerate() {
+                let dist = corner_world.distance(world_pos);
+                if dist <= deformable.handle_radius {
+                    if closest_hover.map_or(true, |(_, _, _, min_d)| dist < min_d) {
+                        closest_hover = Some((entity, idx, HandleKind::Original, dist));
+                    }
                 }
             }
         }
     }
 
-    drag_state.hovered_corner = closest_hover.map(|(e, i, _)| (e, i));
+    drag_state.hovered_corner = closest_hover.map(|(e, i, k, _)| (e, i, k));
 
     // Handle mouse click to start drag
     if mouse_button.just_pressed(MouseButton::Left) {
-        if let Some((entity, corner_idx)) = drag_state.hovered_corner {
+        if let Some((entity, corner_idx, handle_kind)) = drag_state.hovered_corner {
             drag_state.active_entity = Some(entity);
-            drag_state.dragged_corner = Some(corner_idx);
+            drag_state.dragged_corner = Some((corner_idx, handle_kind));
         }
     }
 }
 
 /// Visualizes corner handles and bounding quad using Bevy Gizmos.
 fn draw_corner_gizmos(
-    mut drag_state: ParamSet<(Res<CornerDragState>, Res<CornerDragState>)>,
-    tristate: Res<TriangulationState>,
-    deformable_query: Query<(Entity, &DeformableImage, &GlobalTransform)>,
-
-    mut gizmos: ParamSet<(Gizmos<DefaultGizmos>, Gizmos<DefaultGizmos>)>,
-) {
-    draw_corner_gizmos_scale(drag_state.p0(), deformable_query, 1.0, gizmos.p0());
-    draw_corner_gizmos_scale(
-        drag_state.p1(),
-        deformable_query,
-        tristate.deformable_scale,
-        gizmos.p1(),
-    );
-}
-
-fn draw_corner_gizmos_scale(
     drag_state: Res<CornerDragState>,
+    tristate: Option<Res<TriangulationState>>,
     deformable_query: Query<(Entity, &DeformableImage, &GlobalTransform)>,
-    scale: f32,
     mut gizmos: Gizmos<DefaultGizmos>,
 ) {
+    let scale = tristate.as_ref().map_or(1.0, |t| t.deformable_scale);
+
     for (entity, deformable, entity_gt) in deformable_query.iter() {
         if !deformable.enabled {
             continue;
         }
 
-        let corners_world: [Vec2; 4] = [
+        let mode = deformable.drag_mode.unwrap_or(drag_state.drag_mode);
+
+        let corners_world_orig: [Vec2; 4] = [
             entity_gt
                 .transform_point(deformable.corners[0].extend(0.0))
                 .xy(),
@@ -346,39 +471,77 @@ fn draw_corner_gizmos_scale(
                 .xy(),
         ];
 
-        let scalecenter = scale_center(corners_world);
+        let corners_world_scaled = compute_scaled_corners(corners_world_orig, scale);
+        let has_scale_offset = (scale - 1.0).abs() >= 1e-4;
 
-        let corners_scaled: [Vec2; 4] = [
-            corners_world[0] * scale + scalecenter * (1. - scale),
-            corners_world[1] * scale + scalecenter * (1. - scale),
-            corners_world[2] * scale + scalecenter * (1. - scale),
-            corners_world[3] * scale + scalecenter * (1. - scale),
-        ];
+        let frame_color_outer = Color::srgba(0.2, 0.8, 1.0, 0.35);
+        let frame_color_inner = Color::srgba(0.2, 0.8, 1.0, 0.6);
 
-        let frame_color = Color::srgba(0.2, 0.8, 1.0, 0.6);
+        // 1. Draw outer quad lines
+        draw_quad_lines(&mut gizmos, corners_world_orig, frame_color_outer);
 
-        // Draw bounding quadrilateral lines
-        gizmos.line_2d(corners_scaled[0], corners_scaled[1], frame_color);
-        gizmos.line_2d(corners_scaled[1], corners_scaled[2], frame_color);
-        gizmos.line_2d(corners_scaled[2], corners_scaled[3], frame_color);
-        gizmos.line_2d(corners_scaled[3], corners_scaled[0], frame_color);
-
-        // Draw corner handle circles
-        for (idx, &corner_world) in corners_scaled.iter().enumerate() {
-            let is_dragged =
-                drag_state.active_entity == Some(entity) && drag_state.dragged_corner == Some(idx);
-            let is_hovered = drag_state.hovered_corner == Some((entity, idx));
-
-            let (color, radius) = if is_dragged {
-                (Color::srgb(0.0, 1.0, 0.4), 10.0)
-            } else if is_hovered {
-                (Color::srgb(1.0, 0.9, 0.2), 9.0)
-            } else {
-                (Color::srgb(0.2, 0.8, 1.0), 7.0)
-            };
-
-            gizmos.circle_2d(corner_world, radius, color);
+        // 2. Draw inner quad lines if scaled
+        if has_scale_offset {
+            draw_quad_lines(&mut gizmos, corners_world_scaled, frame_color_inner);
         }
+
+        // 3. Draw outer handles
+        let orig_interactive = matches!(mode, CornerDragMode::Original | CornerDragMode::Both);
+        draw_quad_handles(
+            &mut gizmos,
+            entity,
+            &drag_state,
+            corners_world_orig,
+            HandleKind::Original,
+            orig_interactive,
+        );
+
+        // 4. Draw inner handles if scaled
+        if has_scale_offset {
+            let scaled_interactive = matches!(mode, CornerDragMode::Scaled | CornerDragMode::Both);
+            draw_quad_handles(
+                &mut gizmos,
+                entity,
+                &drag_state,
+                corners_world_scaled,
+                HandleKind::Scaled,
+                scaled_interactive,
+            );
+        }
+    }
+}
+
+fn draw_quad_lines(gizmos: &mut Gizmos<DefaultGizmos>, corners: [Vec2; 4], color: Color) {
+    gizmos.line_2d(corners[0], corners[1], color);
+    gizmos.line_2d(corners[1], corners[2], color);
+    gizmos.line_2d(corners[2], corners[3], color);
+    gizmos.line_2d(corners[3], corners[0], color);
+}
+
+fn draw_quad_handles(
+    gizmos: &mut Gizmos<DefaultGizmos>,
+    entity: Entity,
+    drag_state: &CornerDragState,
+    corners: [Vec2; 4],
+    kind: HandleKind,
+    interactive: bool,
+) {
+    for (idx, &corner_world) in corners.iter().enumerate() {
+        let is_dragged = drag_state.active_entity == Some(entity)
+            && drag_state.dragged_corner == Some((idx, kind));
+        let is_hovered = drag_state.hovered_corner == Some((entity, idx, kind));
+
+        let (color, radius) = if is_dragged {
+            (Color::srgb(0.0, 1.0, 0.4), 10.0)
+        } else if is_hovered {
+            (Color::srgb(1.0, 0.9, 0.2), 9.0)
+        } else if interactive {
+            (Color::srgb(0.2, 0.8, 1.0), 7.0)
+        } else {
+            (Color::srgba(0.2, 0.8, 1.0, 0.4), 4.5)
+        };
+
+        gizmos.circle_2d(corner_world, radius, color);
     }
 }
 
@@ -478,4 +641,71 @@ fn signed_area(pts: &[Vec2]) -> f32 {
         sum += a.x * b.y - b.x * a.y;
     }
     sum * 0.5
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_solver_comprehensive() {
+        let original_corners = [
+            Vec2::new(-100.0, 50.0),
+            Vec2::new(100.0, 50.0),
+            Vec2::new(100.0, -50.0),
+            Vec2::new(-100.0, -50.0),
+        ];
+
+        for &scale in &[0.1, 0.25, 0.5, 0.75, 0.9, 1.0] {
+            for corner_idx in 0..4 {
+                let mut current_corners = original_corners;
+                for step in 1..=5 {
+                    let scaled_now = compute_scaled_corners(current_corners, scale)[corner_idx];
+                    let mouse_target = scaled_now + Vec2::new(step as f32 * 2.0, -(step as f32) * 1.5);
+                    let new_c = solve_corner_for_scaled_target(current_corners, corner_idx, scale, mouse_target);
+                    let actual_scaled = compute_scaled_corners({
+                        let mut c = current_corners;
+                        c[corner_idx] = new_c;
+                        c
+                    }, scale)[corner_idx];
+                    current_corners[corner_idx] = new_c;
+                    assert!(
+                        (actual_scaled - mouse_target).length() < 1e-2,
+                        "scale={scale}, corner={corner_idx}, step={step}: err={}",
+                        (actual_scaled - mouse_target).length()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_compute_scaled_corners() {
+        let original_corners = [
+            Vec2::new(-100.0, 50.0),
+            Vec2::new(100.0, 50.0),
+            Vec2::new(100.0, -50.0),
+            Vec2::new(-100.0, -50.0),
+        ];
+
+        // Scale 1.0 should return identical corners
+        let at_1 = compute_scaled_corners(original_corners, 1.0);
+        for i in 0..4 {
+            assert!((at_1[i] - original_corners[i]).length() < 1e-4);
+        }
+
+        // Scale 0.5 should halve the dimensions around center (0, 0)
+        let at_half = compute_scaled_corners(original_corners, 0.5);
+        assert!((at_half[0] - Vec2::new(-50.0, 25.0)).length() < 1e-4);
+        assert!((at_half[1] - Vec2::new(50.0, 25.0)).length() < 1e-4);
+        assert!((at_half[2] - Vec2::new(50.0, -25.0)).length() < 1e-4);
+        assert!((at_half[3] - Vec2::new(-50.0, -25.0)).length() < 1e-4);
+    }
+
+    #[test]
+    fn test_modes() {
+        assert_eq!(CornerDragMode::default(), CornerDragMode::Scaled);
+        let drag_state = CornerDragState::default();
+        assert_eq!(drag_state.drag_mode, CornerDragMode::Scaled);
+    }
 }

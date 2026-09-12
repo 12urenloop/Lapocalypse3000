@@ -1,7 +1,7 @@
 use std::{collections::HashSet, time::Duration};
 
 use crate::{
-    deformable_image::{DeformableGizmos, DeformableImage},
+    deformable_image::{CornerDragMode, CornerDragState, DeformableGizmos, DeformableImage},
     rate_monitor::RateMonitor,
     ui::{DefaultGizmos, set_gizmo_renderlayer},
 };
@@ -388,6 +388,7 @@ pub struct TriangulationUiState<'w, 's> {
     provider: ResMut<'w, ActiveDistanceProvider>,
     background: Query<'w, 's, &'static mut Transform, With<BackgroundImage>>,
     border: Query<'w, 's, (&'static mut Transform, &'static BorderRect), Without<BackgroundImage>>,
+    corner_drag: ResMut<'w, CornerDragState>,
 }
 
 /// egui window for editing anchor positions, distances, and provider selection.
@@ -660,6 +661,33 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
         );
         let s = params.state.deformable_scale;
         // params.border.single_mut().unwrap().0.scale = Vec3 { x: s, y: s, z: 1.0 };
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Corner drag:");
+        egui::ComboBox::from_id_salt("corner_drag_mode")
+            .selected_text(match params.corner_drag.drag_mode {
+                CornerDragMode::Scaled => "Inner (Scaled)",
+                CornerDragMode::Original => "Outer (Full)",
+                CornerDragMode::Both => "Both",
+            })
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut params.corner_drag.drag_mode,
+                    CornerDragMode::Scaled,
+                    "Inner (Scaled)",
+                );
+                ui.selectable_value(
+                    &mut params.corner_drag.drag_mode,
+                    CornerDragMode::Original,
+                    "Outer (Full)",
+                );
+                ui.selectable_value(
+                    &mut params.corner_drag.drag_mode,
+                    CornerDragMode::Both,
+                    "Both",
+                );
+            });
     });
 
     ui.checkbox(&mut params.state.show_extradebug, "Show debug UI");

@@ -1,9 +1,16 @@
 use std::{collections::HashSet, time::Duration};
 
-use crate::{rate_monitor::RateMonitor, ui::set_gizmo_renderlayer};
+use crate::{
+    deformable_image::{DeformableGizmos, DeformableImage},
+    rate_monitor::RateMonitor,
+    ui::{DefaultGizmos, set_gizmo_renderlayer},
+};
 use bevy::{
-    camera::visibility::RenderLayers, ecs::system::SystemParam, platform::collections::HashMap,
+    camera::{RenderTarget, visibility::RenderLayers},
+    ecs::system::SystemParam,
+    platform::collections::HashMap,
     prelude::*,
+    render::render_resource::TextureFormat,
 };
 use bevy_egui::egui::{self, Ui};
 
@@ -128,6 +135,7 @@ pub struct TriangulationState {
     pub use_second: HashSet<(usize, usize)>, // (anchorid1, anchorid2) -> use second solution when these 2 anchors are available
     pub use_lut: bool,
     pub lut: Vec<(f32, f32)>, // (measured, actual)
+    pub deformable_scale: f32,
 }
 
 fn apply_lut(distance: f32, lut: &[(f32, f32)]) -> f32 {
@@ -215,6 +223,7 @@ impl Default for TriangulationState {
                 (56.0, 61.4),
                 (101., 107.),
             ],
+            deformable_scale: 1.0,
         }
 
         // (0.0, 0.0),
@@ -378,6 +387,7 @@ pub struct TriangulationUiState<'w, 's> {
     state: ResMut<'w, TriangulationState>,
     provider: ResMut<'w, ActiveDistanceProvider>,
     background: Query<'w, 's, &'static mut Transform, With<BackgroundImage>>,
+    border: Query<'w, 's, (&'static mut Transform, &'static BorderRect), Without<BackgroundImage>>,
 }
 
 /// egui window for editing anchor positions, distances, and provider selection.
@@ -642,6 +652,14 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
                 .speed(1.0)
                 .range(1.0..=100.0),
         );
+
+        ui.add(
+            egui::DragValue::new(&mut params.state.deformable_scale)
+                .speed(0.005)
+                .range(0.1..=1.0),
+        );
+        let s = params.state.deformable_scale;
+        // params.border.single_mut().unwrap().0.scale = Vec3 { x: s, y: s, z: 1.0 };
     });
 
     ui.checkbox(&mut params.state.show_extradebug, "Show debug UI");
@@ -688,10 +706,15 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
 #[derive(Component)]
 struct BackgroundImage; // Component for overlayed background image (map or sattelite pic of location)
 
+#[derive(Component)]
+struct BorderRect;
+
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut gizmoconfig: ResMut<GizmoConfigStore>,
+    mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands.spawn((
         // Sprite::from_image(asset_server.load("parking.png")),
@@ -704,36 +727,75 @@ fn setup(
             z: 0.032,
         }), // plein 1
     ));
+
+    let image = Image::new_target_texture(
+        1920,
+        1080,
+        TextureFormat::Rgba8Unorm,
+        Some(TextureFormat::Rgba8UnormSrgb),
+    );
+    let first_pass_layer = RenderLayers::layer(1);
+    let image_handle = images.add(image);
+
+    commands.spawn((
+        Camera2d::default(),
+        Camera {
+            // render before the "main pass" camera
+            order: -1,
+            clear_color: Color::NONE.into(),
+            ..default()
+        },
+        RenderTarget::Image(image_handle.clone().into()),
+        first_pass_layer.clone(),
+    ));
+
+    let material_handle = materials.add(ColorMaterial {
+        texture: Some(image_handle.clone()),
+        ..default()
+    });
+
+    let border = meshes.add(Rectangle::new(1900.0, 1060.0).to_ring(20.0));
+
+    commands.spawn((
+        Mesh2d(border),
+        MeshMaterial2d(materials.add(Color::WHITE)),
+        first_pass_layer,
+        BorderRect,
+        Transform::default(),
+    ));
+
+    let (deformable, mesh_handle) =
+        DeformableImage::new_rect(Vec2::new(192.0, 108.0), 16, &mut meshes);
+
+    commands.spawn((
+        Mesh2d(mesh_handle),
+        MeshMaterial2d(material_handle),
+        Transform::default(),
+        deformable,
+    ));
 }
 
 /// Draw anchors, distance circles, and the estimated position using gizmos.
-fn draw_triangulation(
-    state: Res<TriangulationState>,
-    mut params: ParamSet<(ResMut<GizmoConfigStore>, Gizmos)>,
-) {
-    set_gizmo_renderlayer(1, params.p0());
-
-    let mut gizmos = params.p1();
+fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos<DeformableGizmos>) {
     let s = state.scale;
-
-    // --- Grid / origin marker ---
-    let grid_half = 5.0 * state.scale;
-    gizmos.line_2d(
-        Vec2::new(-grid_half, 0.0),
-        Vec2::new(grid_half, 0.0),
-        Color::srgba(0.3, 0.3, 0.3, 0.5),
-    );
-    gizmos.line_2d(
-        Vec2::new(0.0, -grid_half),
-        Vec2::new(0.0, grid_half),
-        Color::srgba(0.3, 0.3, 0.3, 0.5),
-    );
-
     let mut avg_pos = Vec2::new(0.0, 0.0);
     for (&id, &pos) in state.anchors.iter() {
         avg_pos += pos;
     }
     avg_pos /= state.anchors.len() as f32;
+
+    // --- Grid / origin marker ---
+    let grid_half = 5.0 * state.scale;
+    gizmos.line_2d(
+        Vec2::new(-grid_half, 0.0) - avg_pos * s,
+        Vec2::new(grid_half, 0.0) - avg_pos * s,
+        Color::srgba(0.3, 0.3, 0.3, 0.5),
+    );
+    gizmos.line_2d(
+        Vec2::new(0.0, -grid_half) - avg_pos * s,
+        Vec2::new(0.0, grid_half) - avg_pos * s,
+        Color::srgba(0.3, 0.3, 0.3, 0.5),
+    );
 
     // --- Anchors ---
     for (&id, &pos) in state.anchors.iter() {
@@ -799,7 +861,7 @@ fn draw_triangulation(
 
         // for one solution (>=3 anchors in range)
         if let Some(pos) = showpos {
-            let chosen_screen = (pos - avg_pos) * s;
+            let chosen_screen = (pos) * s - avg_pos;
             let hue = (((tag_id + 4) as f32) * 137.5) % 360.0;
             let color = Color::hsla(hue, 0.8, 0.5, 0.5);
             // Chosen estimated position (yellow)
@@ -825,7 +887,7 @@ fn draw_triangulation(
                         continue;
                     }
                     if let Some(&anchor_pos) = state.anchors.get(&anchor_id) {
-                        let anchor_screen = anchor_pos * s;
+                        let anchor_screen = (anchor_pos - avg_pos) * s;
                         let hue = ((anchor_id as f32) * 137.5) % 360.0;
                         let color = Color::hsla(hue, 0.8, 0.5, 0.5);
                         gizmos.line_2d(anchor_screen, chosen_screen, color);

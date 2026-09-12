@@ -76,14 +76,6 @@ fn setup_log_provider(
 ) {
     provider.available.push(DistanceProviderKind::LogFiles);
 
-    let image = Image::new_target_texture(
-        1920,
-        1080,
-        TextureFormat::Rgba8Unorm,
-        Some(TextureFormat::Rgba8UnormSrgb),
-    );
-    let first_pass_layer = RenderLayers::layer(1);
-    let image_handle = images.add(image);
     let video_handle = images.add(Image::new_target_texture(
         1920,
         1080,
@@ -92,46 +84,11 @@ fn setup_log_provider(
     ));
 
     commands.spawn((
-        Camera2d::default(),
-        Camera {
-            // render before the "main pass" camera
-            order: -1,
-            clear_color: Color::NONE.into(),
-            ..default()
-        },
-        RenderTarget::Image(image_handle.clone().into()),
-        first_pass_layer.clone(),
-    ));
-
-    let border = meshes.add(Rectangle::new(1900.0, 1060.0).to_ring(20.0));
-
-    commands.spawn((
-        Mesh2d(border),
-        MeshMaterial2d(materials.add(Color::WHITE)),
-        first_pass_layer,
-    ));
-
-    let (deformable, mesh_handle) =
-        DeformableImage::new_rect(Vec2::new(192.0, 108.0), 16, &mut meshes);
-
-    let material_handle = materials.add(ColorMaterial {
-        texture: Some(image_handle.clone()),
-        ..default()
-    });
-
-    commands.spawn((
         Sprite::from_image(video_handle.clone()),
         Transform::default(),
         VideoSprite {
             image: video_handle,
         },
-    ));
-
-    commands.spawn((
-        Mesh2d(mesh_handle),
-        MeshMaterial2d(material_handle),
-        Transform::default(),
-        deformable,
     ));
 }
 

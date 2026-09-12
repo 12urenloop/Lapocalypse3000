@@ -6,7 +6,8 @@ use bevy::render::render_resource::PrimitiveTopology;
 use bevy_egui::EguiContexts;
 
 use crate::MainCamera;
-use crate::ui::set_gizmo_renderlayer;
+use crate::triangulation::{TriangulationState, TriangulationUiState};
+use crate::ui::{DefaultGizmos, set_gizmo_renderlayer};
 
 /// Component attached to entities whose 2D image/mesh can be deformed, scaled, and rotated
 /// by dragging its 4 corners.
@@ -31,6 +32,9 @@ pub struct DeformableImage {
     /// Whether interaction and gizmos are active
     pub enabled: bool,
 }
+
+#[derive(Default, Reflect, GizmoConfigGroup)]
+pub struct DeformableGizmos;
 
 impl DeformableImage {
     /// Creates a default rectangular `DeformableImage` centered at (0,0) and generates its mesh.
@@ -90,15 +94,23 @@ pub struct DeformableImagePlugin;
 
 impl Plugin for DeformableImagePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CornerDragState>().add_systems(
-            Update,
-            (
-                handle_corner_drag,
-                update_deformable_mesh,
-                // draw_corner_gizmos,
+        app.init_resource::<CornerDragState>()
+            .add_systems(
+                Update,
+                (
+                    handle_corner_drag,
+                    update_deformable_mesh,
+                    draw_corner_gizmos,
+                )
+                    .chain(),
             )
-                .chain(),
-        );
+            .init_gizmo_group::<DeformableGizmos>();
+
+        // Configure respective render layers
+        let mut config_store = app.world_mut().resource_mut::<GizmoConfigStore>();
+
+        let (config_a, _) = config_store.config_mut::<DeformableGizmos>();
+        config_a.render_layers = RenderLayers::layer(1);
     }
 }
 
@@ -293,14 +305,27 @@ fn handle_corner_drag(
 
 /// Visualizes corner handles and bounding quad using Bevy Gizmos.
 fn draw_corner_gizmos(
+    mut drag_state: ParamSet<(Res<CornerDragState>, Res<CornerDragState>)>,
+    tristate: Res<TriangulationState>,
+    deformable_query: Query<(Entity, &DeformableImage, &GlobalTransform)>,
+
+    mut gizmos: ParamSet<(Gizmos<DefaultGizmos>, Gizmos<DefaultGizmos>)>,
+) {
+    draw_corner_gizmos_scale(drag_state.p0(), deformable_query, 1.0, gizmos.p0());
+    draw_corner_gizmos_scale(
+        drag_state.p1(),
+        deformable_query,
+        tristate.deformable_scale,
+        gizmos.p1(),
+    );
+}
+
+fn draw_corner_gizmos_scale(
     drag_state: Res<CornerDragState>,
     deformable_query: Query<(Entity, &DeformableImage, &GlobalTransform)>,
-    mut params: ParamSet<(ResMut<GizmoConfigStore>, Gizmos)>,
+    scale: f32,
+    mut gizmos: Gizmos<DefaultGizmos>,
 ) {
-    set_gizmo_renderlayer(1, params.p0());
-
-    let mut gizmos = params.p1();
-
     for (entity, deformable, entity_gt) in deformable_query.iter() {
         if !deformable.enabled {
             continue;
@@ -321,16 +346,25 @@ fn draw_corner_gizmos(
                 .xy(),
         ];
 
+        let scalecenter = scale_center(corners_world);
+
+        let corners_scaled: [Vec2; 4] = [
+            corners_world[0] * scale + scalecenter * (1. - scale),
+            corners_world[1] * scale + scalecenter * (1. - scale),
+            corners_world[2] * scale + scalecenter * (1. - scale),
+            corners_world[3] * scale + scalecenter * (1. - scale),
+        ];
+
         let frame_color = Color::srgba(0.2, 0.8, 1.0, 0.6);
 
         // Draw bounding quadrilateral lines
-        gizmos.line_2d(corners_world[0], corners_world[1], frame_color);
-        gizmos.line_2d(corners_world[1], corners_world[2], frame_color);
-        gizmos.line_2d(corners_world[2], corners_world[3], frame_color);
-        gizmos.line_2d(corners_world[3], corners_world[0], frame_color);
+        gizmos.line_2d(corners_scaled[0], corners_scaled[1], frame_color);
+        gizmos.line_2d(corners_scaled[1], corners_scaled[2], frame_color);
+        gizmos.line_2d(corners_scaled[2], corners_scaled[3], frame_color);
+        gizmos.line_2d(corners_scaled[3], corners_scaled[0], frame_color);
 
         // Draw corner handle circles
-        for (idx, &corner_world) in corners_world.iter().enumerate() {
+        for (idx, &corner_world) in corners_scaled.iter().enumerate() {
             let is_dragged =
                 drag_state.active_entity == Some(entity) && drag_state.dragged_corner == Some(idx);
             let is_hovered = drag_state.hovered_corner == Some((entity, idx));
@@ -346,4 +380,102 @@ fn draw_corner_gizmos(
             gizmos.circle_2d(corner_world, radius, color);
         }
     }
+}
+
+/// Finds a point `p` such that scaling the quadrilateral toward `p` by any
+/// factor k in (0, 1) produces a polygon strictly nested inside the original.
+///
+/// Works for any simple (non-self-intersecting) quadrilateral, convex or
+/// concave. The vertex mean only works for the convex case — for a concave
+/// "dart" quad it can land in the notch cut out by the reflex vertex,
+/// i.e. outside the polygon, which breaks nesting.
+pub fn scale_center(poly: [Vec2; 4]) -> Vec2 {
+    let mut pts = poly.to_vec();
+    if signed_area(&pts) < 0.0 {
+        pts.reverse(); // normalize to CCW
+    }
+
+    let mut kernel = pts.clone();
+    for i in 0..pts.len() {
+        let a = pts[i];
+        let b = pts[(i + 1) % pts.len()];
+        kernel = clip_half_plane(&kernel, a, b);
+        if kernel.is_empty() {
+            break;
+        }
+    }
+
+    polygon_centroid(&kernel).unwrap_or_else(|| {
+        // Degenerate fallback: near-zero-area kernel (e.g. three
+        // vertices almost collinear). Just average whatever survived.
+        let fallback = if kernel.is_empty() { &pts } else { &kernel };
+        fallback.iter().fold(Vec2::ZERO, |a, &b| a + b) / fallback.len() as f32
+    })
+}
+
+/// Sutherland–Hodgman clip: keeps the part of `poly` on the interior
+/// (left) side of the directed line through `a -> b`.
+fn clip_half_plane(poly: &[Vec2], a: Vec2, b: Vec2) -> Vec<Vec2> {
+    let edge = b - a;
+    let side = |p: Vec2| edge.perp_dot(p - a);
+
+    let mut out = Vec::with_capacity(poly.len() + 1);
+    let n = poly.len();
+    for i in 0..n {
+        let cur = poly[i];
+        let next = poly[(i + 1) % n];
+        let s_cur = side(cur);
+        let s_next = side(next);
+        let cur_in = s_cur >= -EPS;
+        let next_in = s_next >= -EPS;
+
+        if cur_in {
+            out.push(cur);
+        }
+        if cur_in != next_in {
+            let denom = s_cur - s_next;
+            if denom.abs() > EPS {
+                let t = (s_cur / denom).clamp(0.0, 1.0);
+                let p = cur + (next - cur) * t;
+                // avoid duplicate points when the crossing lands on a
+                // vertex that's already on the clip line
+                if out
+                    .last()
+                    .map_or(true, |&last| last.distance_squared(p) > EPS * EPS)
+                {
+                    out.push(p);
+                }
+            }
+        }
+    }
+    out
+}
+const EPS: f32 = 1e-6;
+/// Area-weighted centroid of a convex polygon. `None` if near-zero area.
+fn polygon_centroid(poly: &[Vec2]) -> Option<Vec2> {
+    if poly.len() < 3 {
+        return None;
+    }
+    let mut area = 0.0;
+    let mut c = Vec2::ZERO;
+    for i in 0..poly.len() {
+        let p0 = poly[i];
+        let p1 = poly[(i + 1) % poly.len()];
+        let cross = p0.x * p1.y - p1.x * p0.y;
+        area += cross;
+        c += (p0 + p1) * cross;
+    }
+    area *= 0.5;
+    (area.abs() >= EPS).then(|| c / (6.0 * area))
+}
+
+fn signed_area(pts: &[Vec2]) -> f32 {
+    let mut sum = 0.0;
+    let n = pts.len();
+    for i in 0..n {
+        let a = pts[i];
+        let b = pts[(i + 1) % n];
+        sum += a.x * b.y - b.x * a.y;
+    }
+    sum * 0.5
 }

@@ -2,6 +2,9 @@ use bevy::{camera::visibility::RenderLayers, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use egui::{LayerId, Ui, UiBuilder};
 
+#[derive(Default, Reflect, GizmoConfigGroup)]
+pub struct DefaultGizmos;
+
 use crate::{
     config::{ConfigUiState, config_ui},
     log_distance_provider::{LogDistanceUiState, log_sidepanel_ui},
@@ -12,7 +15,17 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(EguiPrimaryContextPass, sidepanel_ui);
+        app.add_systems(EguiPrimaryContextPass, sidepanel_ui)
+            .init_gizmo_group::<DefaultGizmos>();
+
+        // Configure respective render layers
+        let mut config_store = app.world_mut().resource_mut::<GizmoConfigStore>();
+
+        // Configure respective render layers
+        let mut config_store = app.world_mut().resource_mut::<GizmoConfigStore>();
+
+        let (config_a, _) = config_store.config_mut::<DefaultGizmos>();
+        config_a.render_layers = RenderLayers::layer(0);
     }
 }
 

@@ -1,12 +1,37 @@
 envs:
   gras1:
     anchors:
-      1:
+      '1':
+        x: 11.8
+        y: 18.4
+      '2':
+        x: 22.9
+        y: 0.0
+      '3':
         x: 0.0
         y: 0.0
-      2:
-        x: 10.0
-        y: 0.0
-      3:
-        x: 5.0
-        y: 8.0
+    recording_name: gras1
+    video_path: ./assets/gras1.mp4
+    video_position:
+      x: 150.0
+      y: 0.0
+      z: -0.08
+    video_scale:
+      x: 0.75
+      y: 0.75
+      z: 1.0
+    video_rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    deformable_corners:
+    - x: -1172.5544
+      y: 316.21503
+    - x: 1437.8167
+      y: 266.81702
+    - x: 1902.368
+      y: -550.318
+    - x: -1749.6178
+      y: -518.4942
+    ui_scale: 26.0
+    video_sync_offset_ms: -234922

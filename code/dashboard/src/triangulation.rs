@@ -72,9 +72,9 @@ pub struct ActiveDistanceProvider {
 impl Default for ActiveDistanceProvider {
     fn default() -> Self {
         Self {
-            kind: DistanceProviderKind::Udp,
+            kind: DistanceProviderKind::LogFiles,
             // Manual is always available; other providers register themselves.
-            available: vec![DistanceProviderKind::Udp],
+            available: vec![DistanceProviderKind::Udp, DistanceProviderKind::LogFiles],
         }
     }
 }
@@ -889,7 +889,7 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos<Deforma
 
         // for one solution (>=3 anchors in range)
         if let Some(pos) = showpos {
-            let chosen_screen = (pos) * s - avg_pos;
+            let chosen_screen = (pos - avg_pos) * s;
             let hue = (((tag_id + 4) as f32) * 137.5) % 360.0;
             let color = Color::hsla(hue, 0.8, 0.5, 0.5);
             // Chosen estimated position (yellow)

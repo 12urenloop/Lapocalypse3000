@@ -135,7 +135,6 @@ fn log_playback_system(
     provider: Res<ActiveDistanceProvider>,
     mut events: MessageWriter<DistanceMeasurement>,
     mut previous_state: Local<HashMap<(usize, usize), Option<(u64, f32)>>>,
-    mut last_resync_ms: Local<u64>,
     mut video_player_query: Query<(Entity, &mut VideoPlayer), With<VideoSprite>>,
     mut video_resource: NonSendMut<VideoResource>,
 ) {
@@ -193,7 +192,11 @@ fn log_playback_system(
         }
     }
 
-    // --- Video sync: mirror play/pause and correct drift ---
+    // --- Video sync: mirror play/pause only ---
+    // Deliberately no continuous drift correction here: re-seeking while
+    // playing flushes the decoder and makes the video stutter. Sync seeks
+    // happen only on discrete user actions (Play press, scrub, restart,
+    // loop wrap, sync confirm); while playing both just run freely.
     if let Ok((video_entity, mut video_player)) = video_player_query.single_mut() {
         if let Some(offset_ms) = state.video_sync_offset_ms {
             let expected_video_ms = state.current_time_ms as i64 + offset_ms;
@@ -207,21 +210,6 @@ fn log_playback_system(
                 // so playback resumes in sync.
                 if !should_pause {
                     video_resource.seek(video_entity, expected_video_ms.max(0));
-                    *last_resync_ms = state.current_time_ms;
-                }
-            } else if state.is_playing {
-                // While playing, the video advances by decode rate and the log
-                // by wall-clock, so they drift apart. Re-seek when the drift
-                // exceeds the threshold (checked at most ~2x per second).
-                let time_since_resync = state.current_time_ms.saturating_sub(*last_resync_ms);
-                if time_since_resync > 500 {
-                    *last_resync_ms = state.current_time_ms;
-                    if let Some(actual_video_ms) = video_resource.position_ms(video_entity) {
-                        let drift = (actual_video_ms - expected_video_ms.max(0)).abs();
-                        if drift > 250 {
-                            video_resource.seek(video_entity, expected_video_ms.max(0));
-                        }
-                    }
                 }
             }
         }

@@ -195,7 +195,7 @@ fn forward_udp_to_events(
                     anchor_id: payload.anchor_id,
                     tag_id: payload.tag_id,
                     distance: Some(payload.distance),
-                    timestamp: payload.timestamp,
+                    timestamp: payload.timestamp as u64,
                 });
             }
         }

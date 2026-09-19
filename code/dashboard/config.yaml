@@ -42,7 +42,7 @@ envs:
         x: 0.0
         y: 0.0
       '2':
-        x: -2.6
+        x: -1.75
         y: 0.0
     recording_name: gras1
     video_path: ./assets/gras1.mp4

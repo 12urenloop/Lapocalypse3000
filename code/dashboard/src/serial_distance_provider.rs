@@ -37,7 +37,7 @@ struct SerialDistancePayload {
     anchor_id: usize,
     tag_id: usize,
     distance: f32,
-    timestamp: u32,
+    timestamp: u64,
 }
 
 #[derive(Resource)]
@@ -135,7 +135,9 @@ fn setup_serial_connection(
     commands.insert_resource(SerialDistanceReceiver { payloads });
     println!("Serial provider setup ok");
 }
-
+const MS_TO_DWT_TIME: u64 = 249601;
+const MAX_SYSTS: u64 = 1_099_511_627_775; // 40 bits
+const MAX_SYSTS_MS: u64 = MAX_SYSTS / MS_TO_DWT_TIME;
 /// Parse a message of the form `1 | 1 = 1.23@100-200 | 2 = 4.56@100-200`
 /// Returns one payload per tag-distance pair.
 fn parse_serial_message(text: &str) -> Option<Vec<SerialDistancePayload>> {
@@ -159,7 +161,11 @@ fn parse_serial_message(text: &str) -> Option<Vec<SerialDistancePayload>> {
                 Ok(val) => val,
                 Err(_) => continue,
             };
-            let timestamp: u32 = match caps[4].parse() {
+            let rollovers: u64 = match caps[3].parse() {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
+            let systs: u64 = match caps[4].parse() {
                 Ok(val) => val,
                 Err(_) => continue,
             };
@@ -168,7 +174,7 @@ fn parse_serial_message(text: &str) -> Option<Vec<SerialDistancePayload>> {
                 anchor_id,
                 tag_id,
                 distance,
-                timestamp,
+                timestamp: rollovers * MAX_SYSTS_MS + systs,
             });
         }
     }

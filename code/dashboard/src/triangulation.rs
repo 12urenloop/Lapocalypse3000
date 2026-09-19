@@ -26,7 +26,7 @@ pub struct DistanceMeasurement {
     pub anchor_id: usize,
     pub tag_id: usize,
     pub distance: Option<f32>,
-    pub timestamp: u32,
+    pub timestamp: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -114,8 +114,8 @@ impl Plugin for TriangulationPlugin {
 // ---------------------------------------------------------------------------
 #[derive(Default)]
 pub struct TagState {
-    pub distances: HashMap<usize, (Option<f32>, u32)>,
-    pub lastdistances: HashMap<usize, (Option<f32>, u32)>,
+    pub distances: HashMap<usize, (Option<f32>, u64)>,
+    pub lastdistances: HashMap<usize, (Option<f32>, u64)>,
     pub solutions: Option<(Vec2, Vec2)>,
     pub estimated_position: Option<Vec2>,
     pub show_radii: bool,

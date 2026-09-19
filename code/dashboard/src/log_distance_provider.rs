@@ -6,8 +6,8 @@ use bevy::{platform::collections::HashMap, prelude::*};
 use bevy_egui::egui;
 use egui::Ui;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub struct LogDistanceProviderPlugin;
@@ -15,8 +15,9 @@ pub struct LogDistanceProviderPlugin;
 impl Plugin for LogDistanceProviderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(LogPlaybackState::default())
+            .insert_resource(LogRecorderState::default())
             .add_systems(Startup, setup_log_provider)
-            .add_systems(Update, log_playback_system);
+            .add_systems(Update, (log_playback_system, log_record_system));
         // .add_systems(EguiPrimaryContextPass, log_playback_ui);
     }
 }
@@ -27,9 +28,35 @@ pub struct VideoSprite {
     pub image: Handle<Image>,
 }
 
+/// On-disk format of the `anchor<N>.txt` log files.
+///
+/// - `Current`: trimmed format written by the recorder, one measurement per line:
+///   `= <tag_id> <distance> <timestamp_ms>` (e.g. `= 0 3.38 4399703`).
+///   Lines not starting with `"= "` (e.g. `#` headers) are ignored.
+/// - `Legacy`: original device-dump format:
+///   `= <tag id> <distance> mesh <synced time ms> <unsynced ms>`
+///   (e.g. `= 1 1.55 mesh 4990319 716230`). Only lines with the `mesh`
+///   marker are parsed; the trailing unsynced field is ignored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LogFormat {
+    #[default]
+    Current,
+    Legacy,
+}
+
+impl std::fmt::Display for LogFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Current => write!(f, "Current (= tag dist ts)"),
+            Self::Legacy => write!(f, "Legacy (= tag dist mesh ts unsynced)"),
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct LogPlaybackState {
     pub recording_name: String,
+    pub log_format: LogFormat,
     pub video_name: String,
     pub is_playing: bool,
     pub current_time_ms: u64,
@@ -65,6 +92,7 @@ impl Default for LogPlaybackState {
     fn default() -> Self {
         Self {
             recording_name: "exp2".to_string(),
+            log_format: LogFormat::Current,
             video_name: "./assets/gras1.mp4".to_string(),
             is_playing: false,
             current_time_ms: 0,
@@ -88,6 +116,101 @@ pub struct LogMeasurement {
     pub tag_id: usize,
     pub distance: f32,
     pub timestamp_ms: u64,
+}
+
+/// Writer side of the log feature: captures live [`DistanceMeasurement`]
+/// events into `data/<record_name>/anchor<N>.txt` in the [`LogFormat::Current`]
+/// format so they can be played back later.
+///
+/// Open file handles are kept while recording; the first write per anchor in
+/// each session truncates any previous file so a re-used name starts clean.
+#[derive(Resource)]
+pub struct LogRecorderState {
+    pub record_name: String,
+    pub is_recording: bool,
+    pub recorded_count: usize,
+    pub skipped_count: usize, // measurements without a distance (None) that can't be logged
+    pub record_error: Option<String>,
+    /// Incremented every time recording starts; per-anchor truncation happens
+    /// only for anchors whose `truncated_session` is older than this.
+    session: u64,
+    truncated_session: HashMap<usize, u64>,
+    files: HashMap<usize, BufWriter<File>>,
+}
+
+impl Default for LogRecorderState {
+    fn default() -> Self {
+        Self {
+            record_name: "recording01".to_string(),
+            is_recording: false,
+            recorded_count: 0,
+            skipped_count: 0,
+            record_error: None,
+            session: 0,
+            truncated_session: HashMap::new(),
+            files: HashMap::new(),
+        }
+    }
+}
+
+impl LogRecorderState {
+    pub fn start(&mut self) {
+        self.session += 1;
+        self.is_recording = true;
+        self.recorded_count = 0;
+        self.skipped_count = 0;
+        self.record_error = None;
+        // Drop open handles so the next write re-opens (and truncates) files
+        // for the new session.
+        self.files.clear();
+    }
+
+    pub fn stop(&mut self) {
+        self.is_recording = false;
+        // Flush and close all open files.
+        for (_, mut w) in self.files.drain() {
+            let _ = w.flush();
+        }
+    }
+
+    fn writer_for(
+        &mut self,
+        anchor_id: usize,
+    ) -> Result<&mut BufWriter<File>, String> {
+        let session = self.session;
+        let record_name = self.record_name.clone();
+        if !self.files.contains_key(&anchor_id) {
+            let dir: PathBuf = Path::new("data").join(&record_name);
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                return Err(format!("create dir {}: {e}", dir.display()));
+            }
+            let path = dir.join(format!("anchor{anchor_id}.txt"));
+            // First write of this session truncates leftovers from a previous
+            // recording under the same name; later writes append.
+            let truncate = self.truncated_session.get(&anchor_id) != Some(&session);
+            let mut opts = File::options();
+            opts.create(true).write(true);
+            if truncate {
+                opts.truncate(true);
+            } else {
+                opts.append(true);
+            }
+            match opts.open(&path) {
+                Ok(file) => {
+                    let mut w = BufWriter::new(file);
+                    if truncate {
+                        let _ = writeln!(w, "# tag distance timestamp_ms");
+                        self.truncated_session.insert(anchor_id, session);
+                    }
+                    self.files.insert(anchor_id, w);
+                }
+                Err(e) => return Err(format!("open {}: {e}", path.display())),
+            }
+        }
+        self.files
+            .get_mut(&anchor_id)
+            .ok_or_else(|| "file handle missing after open".to_string())
+    }
 }
 
 fn setup_log_provider(
@@ -253,13 +376,112 @@ fn log_playback_system(
                 anchor_id: anchorid,
                 tag_id: tagid,
                 distance: val.map(|(_, d)| d),
-                timestamp: val.map(|(ts, _)| ts).unwrap_or(0) as u32,
+                timestamp: val.map(|(ts, _)| ts).unwrap_or(0) as u64,
             });
         }
     }
 }
 
-fn load_logs(recording_name: &str) -> Vec<LogMeasurement> {
+/// Capture live [`DistanceMeasurement`] events to disk while recording.
+///
+/// Deliberately ignores events when the active provider is `LogFiles`: those
+/// originate from playback itself, and re-recording them would just duplicate
+/// the already-loaded log (with playback-relative timestamps).
+fn log_record_system(
+    mut events: MessageReader<DistanceMeasurement>,
+    provider: Res<ActiveDistanceProvider>,
+    mut recorder: ResMut<LogRecorderState>,
+) {
+    if !recorder.is_recording {
+        events.clear();
+        return;
+    }
+    if provider.kind == DistanceProviderKind::LogFiles {
+        // Drain so a later Start doesn't replay stale playback events.
+        events.clear();
+        recorder.record_error = Some(
+            "Recording from LogFiles playback is disabled; switch to a live provider.".to_string(),
+        );
+        return;
+    }
+    for ev in events.read() {
+        let Some(distance) = ev.distance else {
+            // Out-of-range markers have no distance to log.
+            recorder.skipped_count += 1;
+            continue;
+        };
+        match recorder.writer_for(ev.anchor_id) {
+            Ok(w) => {
+                // Current format: "= <tag_id> <distance> <timestamp_ms>"
+                if let Err(e) = writeln!(w, "= {} {} {}", ev.tag_id, distance, ev.timestamp) {
+                    recorder.record_error = Some(format!("write failed: {e}"));
+                    recorder.is_recording = false;
+                    break;
+                }
+                // Flush per write so a crash doesn't lose the session.
+                if let Err(e) = w.flush() {
+                    recorder.record_error = Some(format!("flush failed: {e}"));
+                    recorder.is_recording = false;
+                    break;
+                }
+                recorder.recorded_count += 1;
+            }
+            Err(e) => {
+                recorder.record_error = Some(e);
+                recorder.is_recording = false;
+                break;
+            }
+        }
+    }
+}
+
+/// Parse one line of the [`LogFormat::Current`] format:
+/// `= <tag_id> <distance> <timestamp_ms>`.
+fn parse_current_line(line: &str, anchor_id: usize) -> Option<LogMeasurement> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() != 4 || parts[0] != "=" {
+        return None;
+    }
+    if let (Ok(tag_id), Ok(distance), Ok(timestamp_ms)) = (
+        parts[1].parse::<usize>(),
+        parts[2].parse::<f32>(),
+        parts[3].parse::<u64>(),
+    ) {
+        Some(LogMeasurement {
+            anchor_id,
+            tag_id,
+            distance,
+            timestamp_ms,
+        })
+    } else {
+        None
+    }
+}
+
+/// Parse one line of the [`LogFormat::Legacy`] device-dump format:
+/// `= <tag id> <distance> mesh <synced time ms> <unsynced ms>`.
+fn parse_legacy_line(line: &str, anchor_id: usize) -> Option<LogMeasurement> {
+    // format: "= <tag id> <distance in centimeter> mesh <synced time in millis> <unsynced millis>"
+    // example: = 1 1.55 mesh 4990319 716230
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() >= 6 && parts[0] == "=" && parts[3] == "mesh" {
+        if let (Ok(tag_id), Ok(distance), Ok(timestamp_ms)) = (
+            parts[1].parse::<usize>(),
+            parts[2].parse::<f32>(),
+            parts[4].parse::<u64>(),
+        ) {
+            return Some(LogMeasurement {
+                anchor_id,
+                tag_id,
+                distance,
+                timestamp_ms,
+            });
+        }
+    }
+    None
+}
+
+fn load_logs(recording_name: &str, format: LogFormat) -> Vec<LogMeasurement> {
     let mut measurements = Vec::new();
     let dir = Path::new("data").join(recording_name);
     if !dir.exists() {
@@ -276,24 +498,17 @@ fn load_logs(recording_name: &str) -> Vec<LogMeasurement> {
                         if let Ok(file) = File::open(&path) {
                             let reader = BufReader::new(file);
                             for line in reader.lines().flatten() {
-                                if line.starts_with("= ") {
-                                    // format: "= <tag id> <distance in centimeter> mesh <synced time in millis> <unsynced millis>"
-                                    // example: = 1 1.55 mesh 4990319 716230
-                                    let parts: Vec<&str> = line.split_whitespace().collect();
-                                    if parts.len() >= 6 && parts[3] == "mesh" {
-                                        if let (Ok(tag_id), Ok(distance), Ok(timestamp_ms)) = (
-                                            parts[1].parse::<usize>(),
-                                            parts[2].parse::<f32>(),
-                                            parts[4].parse::<u64>(),
-                                        ) {
-                                            measurements.push(LogMeasurement {
-                                                anchor_id,
-                                                tag_id,
-                                                distance,
-                                                timestamp_ms,
-                                            });
-                                        }
+                                if !line.starts_with("= ") {
+                                    continue;
+                                }
+                                let parsed = match format {
+                                    LogFormat::Current => {
+                                        parse_current_line(&line, anchor_id)
                                     }
+                                    LogFormat::Legacy => parse_legacy_line(&line, anchor_id),
+                                };
+                                if let Some(m) = parsed {
+                                    measurements.push(m);
                                 }
                             }
                         }
@@ -317,6 +532,7 @@ fn load_logs(recording_name: &str) -> Vec<LogMeasurement> {
 #[derive(SystemParam)]
 pub struct LogDistanceUiState<'w, 's> {
     state: ResMut<'w, LogPlaybackState>,
+    recorder: ResMut<'w, LogRecorderState>,
     provider: Res<'w, ActiveDistanceProvider>,
     _images: ResMut<'w, Assets<Image>>,
     video_resource: NonSendMut<'w, VideoResource>,
@@ -335,7 +551,7 @@ fn load_recording(
     image: Handle<Image>,
     video_resource: &mut VideoResource,
 ) {
-    let measurements = load_logs(&state.recording_name);
+    let measurements = load_logs(&state.recording_name, state.log_format);
     let max_time = measurements.last().map(|m| m.timestamp_ms).unwrap_or(0);
 
     // Don't crash the whole app when the video file is missing (e.g. a fresh
@@ -357,7 +573,59 @@ fn load_recording(
 }
 
 pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDistanceUiState) {
+    // --- Recording: always visible so live providers (UDP, MQTT, ...) can be
+    // captured without switching the active provider to LogFiles first. ---
+    ui.label(egui::RichText::new("Record measurements").strong());
+    ui.horizontal(|ui| {
+        ui.label("Record Name:");
+        ui.text_edit_singleline(&mut params.recorder.record_name);
+    });
+    ui.label(format!(
+        "Target: data/{}/anchor<N>.txt",
+        params.recorder.record_name
+    ));
+    ui.horizontal(|ui| {
+        if params.recorder.is_recording {
+            if ui.button("⏹ Stop recording").clicked() {
+                params.recorder.stop();
+            }
+            ui.colored_label(
+                egui::Color32::from_rgb(255, 100, 100),
+                format!("⏺ {} measurements", params.recorder.recorded_count),
+            );
+        } else {
+            let live = params.provider.kind != DistanceProviderKind::LogFiles;
+            let btn = ui.add_enabled(
+                live,
+                egui::Button::new("⏺ Start recording"),
+            );
+            if btn.clicked() {
+                params.recorder.start();
+            }
+            if !live {
+                ui.label("Switch to a live provider to record.");
+            } else if params.recorder.recorded_count > 0
+                && !params.recorder.is_recording
+                && params.recorder.record_error.is_none()
+            {
+                ui.label(format!("{} recorded", params.recorder.recorded_count));
+            }
+        }
+    });
+    if let Some(err) = params.recorder.record_error.clone() {
+        ui.colored_label(egui::Color32::from_rgb(240, 100, 100), err);
+    }
+    if params.recorder.skipped_count > 0 {
+        ui.label(format!(
+            "Skipped {} out-of-range (no distance) events.",
+            params.recorder.skipped_count
+        ));
+    }
+
+    ui.separator();
+
     if params.provider.kind != DistanceProviderKind::LogFiles {
+        ui.label("Playback controls appear when the active provider is Log Files.");
         return;
     }
     // Environment selection (or startup) requested a load: perform it without
@@ -380,6 +648,23 @@ pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDist
     ui.horizontal(|ui| {
         ui.label("Recording Name:");
         ui.text_edit_singleline(&mut params.state.recording_name);
+    });
+    ui.horizontal(|ui| {
+        ui.label("Log Format:");
+        egui::ComboBox::from_id_salt("log_format_select")
+            .selected_text(params.state.log_format.to_string())
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut params.state.log_format,
+                    LogFormat::Current,
+                    LogFormat::Current.to_string(),
+                );
+                ui.selectable_value(
+                    &mut params.state.log_format,
+                    LogFormat::Legacy,
+                    LogFormat::Legacy.to_string(),
+                );
+            });
     });
     ui.horizontal(|ui| {
         ui.label("Video Name:");
@@ -477,8 +762,12 @@ pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDist
     }
 
     ui.label(format!(
-        "Loaded {} measurements.",
-        params.state.measurements.len()
+        "Loaded {} measurements ({}).",
+        params.state.measurements.len(),
+        match params.state.log_format {
+            LogFormat::Current => "current",
+            LogFormat::Legacy => "legacy",
+        }
     ));
 
     ui.horizontal(|ui| {
@@ -568,12 +857,10 @@ pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDist
     match params.state.pending_sync_log_ts_ms {
         None => {
             // Step 1: pause video + log, capture log timestamp
-            let btn = ui
-                .button("🎬 Sync: capture log position")
-                .on_hover_text(
-                    "Pause here, then click to record the current log timestamp.\n\
+            let btn = ui.button("🎬 Sync: capture log position").on_hover_text(
+                "Pause here, then click to record the current log timestamp.\n\
                      Next, seek the video to the matching frame and click the second button.",
-                );
+            );
             if btn.clicked() {
                 // Pause playback while the user positions the video manually
                 params.state.is_playing = false;
@@ -695,5 +982,58 @@ pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDist
                 vp.paused = false;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_current_basic() {
+        let m = parse_current_line("= 0 3.38 4399703", 1).expect("should parse");
+        assert_eq!(m.anchor_id, 1);
+        assert_eq!(m.tag_id, 0);
+        assert!((m.distance - 3.38).abs() < 1e-6);
+        assert_eq!(m.timestamp_ms, 4399703);
+    }
+
+    #[test]
+    fn parse_current_rejects_legacy() {
+        // Legacy lines carry the `mesh` marker + trailing field and must not
+        // parse as current format.
+        assert!(parse_current_line("= 1 1.55 mesh 4990319 716230", 2).is_none());
+    }
+
+    #[test]
+    fn parse_legacy_basic() {
+        let m =
+            parse_legacy_line("= 1 1.55 mesh 4990319 716230", 2).expect("should parse");
+        assert_eq!(m.anchor_id, 2);
+        assert_eq!(m.tag_id, 1);
+        assert!((m.distance - 1.55).abs() < 1e-6);
+        assert_eq!(m.timestamp_ms, 4990319);
+    }
+
+    #[test]
+    fn parse_legacy_rejects_current() {
+        assert!(parse_legacy_line("= 0 3.38 4399703", 1).is_none());
+    }
+
+    #[test]
+    fn parse_ignores_garbage() {
+        assert!(parse_current_line("loop time: 50ms", 1).is_none());
+        assert!(parse_current_line("# tag distance timestamp_ms", 1).is_none());
+        assert!(parse_legacy_line(">RX error: 200F0 1 4371458", 1).is_none());
+        assert!(parse_current_line("", 1).is_none());
+    }
+
+    #[test]
+    fn current_roundtrip_format() {
+        // What the recorder writes must parse back identically.
+        let line = format!("= {} {} {}", 3_usize, 12.5_f32, 987654_u64);
+        let m = parse_current_line(&line, 7).expect("should parse");
+        assert_eq!((m.anchor_id, m.tag_id, m.timestamp_ms), (7, 3, 987654));
+        assert!((m.distance - 12.5).abs() < 1e-6);
     }
 }

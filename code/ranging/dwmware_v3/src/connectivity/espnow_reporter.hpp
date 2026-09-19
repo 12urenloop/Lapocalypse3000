@@ -18,8 +18,14 @@
 #define ANCHOR_ID 0
 #endif
 
-uint8_t nextHop[] = {
-    0x34, 0x86, 0x5D, 0xFD, 0x54, 0x08};
+#define GATEWAYMAC {0x34, 0x86, 0x5D, 0xFD, 0x54, 0x08}
+#define ANCHOR1MAC {0xB0, 0xCB, 0xD8, 0xC7, 0x79, 0x48}
+
+#if ANCHOR_ID == 2
+uint8_t nextHop[] = ANCHOR1MAC;
+#else
+uint8_t nextHop[] = GATEWAYMAC;
+#endif
 constexpr uint8_t CHANNEL = 7;
 
 struct __attribute__((packed)) PacketHeader
@@ -46,28 +52,26 @@ struct __attribute__((packed)) Packet
     TagMsg tagmsgs[N_TAGS];
 };
 
-// void onReceive(const uint8_t *mac,
-//                const uint8_t *data,
-//                int len)
-// {
-//     Packet packet;
-//     memcpy(&packet, data, sizeof(packet));
+void anchorOnReceive(const esp_now_recv_info_t *info, const uint8_t *data, int len)
+{
+    // Packet recv_packet;
+    // memcpy(&recv_packet, data, sizeof(recv_packet));
 
-//     if (packet.destination == MY_ID) {
-//         process_packet(packet);
-//         return;
-//     }
+    // if (packet.destination == MY_ID) {
+    //     process_packet(packet);
+    //     return;
+    // }
 
-//     if (packet.hops >= MAX_HOPS) {
-//         return;
-//     }
+    // if (packet.hops >= MAX_HOPS) {
+    //     return;
+    // }
 
-//     packet.hops++;
+    // packet.hops++;
 
-//     esp_now_send(next_hop_mac,
-//                  (uint8_t *)&packet,
-//                  sizeof(packet));
-// }
+    esp_now_send(nextHop,
+                 data,
+                 len);
+}
 
 void setup_espnow()
 {

@@ -1,39 +1,16 @@
 {
-    "id_to_config":{
-        "wemosanchor01":{
-            "pioenv": "wemosanchor01",
-            "tagid": 1,
-            "uwbchip": "DWM3000",
-            "mcu": "ESP32_WROOM",
-            "board": "WEMOS D1 R32"
+    "type_to_config":{
+        "anchor":{
+            "pioenv": "wemosanchor",
+            "id_var": "ANCHOR_ID"
         },
-        "wemosanchor02":{
-            "pioenv": "wemosanchor02",
-            "tagid": 2,
-            "uwbchip": "DWM3000",
-            "mcu": "ESP32_WROOM",
-            "board": "WEMOS D1 R32"
+        "tag":{
+            "pioenv": "nrftag",
+            "id_var": "TAG_ID"
         },
-        "NODEVINFOSET":{
-            "pioenv": "wemostag01",
-            "tagid": 2,
-            "uwbchip": "DWM3000",
-            "mcu": "ESP32_WROOM",
-            "board": "WEMOS D1 R32"
-        },
-        "SOL1":{
-            "pioenv": "upesyanchor",
-            "anchorid": 2,
-            "uwbchip": "DWM3000",
-            "mcu": "ESP32_WROOM",
-            "board": "UPESY"
-        },
-        "FEATHER1":{
-            "pioenv": "adafruit_feather_nrf52832",
-            "anchorid": 3,
-            "uwbchip": "DWM3000",
-            "mcu": "NRF52",
-            "board": "FEATHER"
+        "relay":{
+            "pioenv": "serialrelay",
+            "id_var": "RELAY_ID"
         }
     }
 }

@@ -37,6 +37,8 @@ void setup()
     // mqtt_setup();
     // udp_setup();
     setup_espnow();
+    esp_now_register_recv_cb(anchorOnReceive);
+
 }
 
 

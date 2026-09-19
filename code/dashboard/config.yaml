@@ -1,3 +1,4 @@
+default_env: kamer
 envs:
   gras1:
     anchors:
@@ -35,3 +36,28 @@ envs:
       y: -497.4254
     ui_scale: 26.0
     video_sync_offset_ms: -234922
+  kamer:
+    recording_name: gras1
+    video_path: ./assets/gras1.mp4
+    video_position:
+      x: 150.0
+      y: 0.0
+      z: -0.08
+    video_scale:
+      x: 0.75
+      y: 0.75
+      z: 1.0
+    video_rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    deformable_corners:
+    - x: -492.464
+      y: 506.25656
+    - x: 860.6828
+      y: 509.40918
+    - x: 863.7107
+      y: -499.2047
+    - x: -500.9435
+      y: -516.33844
+    ui_scale: 26.0

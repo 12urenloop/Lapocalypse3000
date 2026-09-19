@@ -7,6 +7,7 @@ use std::{collections::BTreeMap, fs};
 use crate::deformable_image::DeformableImage;
 use crate::log_distance_provider::{LogPlaybackState, VideoSprite};
 use crate::triangulation::TriangulationState;
+use crate::triangulation::{ActiveDistanceProvider, DistanceProviderKind};
 
 #[derive(Debug, Serialize, Deserialize, Resource, Clone, Default)]
 pub struct ConfigFile {
@@ -73,6 +74,9 @@ pub struct NamedEnv {
     /// When set, log playback will seek the video to `current_log_time_ms + video_sync_offset_ms`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_sync_offset_ms: Option<i64>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<DistanceProviderKind>,
 }
 
 impl NamedEnv {
@@ -276,6 +280,7 @@ pub struct ConfigUiState<'w, 's> {
     pub log_state: ResMut<'w, LogPlaybackState>,
     pub videosprite: Query<'w, 's, (Entity, &'static mut Transform, &'static VideoSprite)>,
     pub deformable: Query<'w, 's, &'static mut DeformableImage>,
+    pub provider: ResMut<'w, ActiveDistanceProvider>,
 }
 
 pub fn load_environment(params: &mut ConfigUiState) {
@@ -358,6 +363,10 @@ pub fn load_environment(params: &mut ConfigUiState) {
     }
     if log_changed {
         params.log_state.request_load = true;
+    }
+
+    if let Some(kind) = env.provider {
+        params.provider.kind = kind;
     }
 }
 
@@ -451,6 +460,7 @@ pub fn export_environment(params: &mut ConfigUiState, target_env_name: String) {
         deformable_corners,
         ui_scale: Some(ui_scale),
         video_sync_offset_ms,
+        provider: Some(params.provider.kind),
     };
 
     if params.config.set_as_default_on_export {
@@ -523,8 +533,7 @@ pub fn set_default_environment(params: &mut ConfigUiState, default_name: Option<
             }
         },
         Err(e) => {
-            params.config.status_message =
-                Some((format!("Serialization error: {e}"), false));
+            params.config.status_message = Some((format!("Serialization error: {e}"), false));
         }
     }
 }
@@ -552,11 +561,7 @@ pub fn config_ui(ui: &mut Ui, mut params: ConfigUiState) {
                     } else {
                         envname.clone()
                     };
-                    ui.selectable_value(
-                        &mut params.config.envname,
-                        envname.clone(),
-                        label,
-                    );
+                    ui.selectable_value(&mut params.config.envname, envname.clone(), label);
                 }
             });
 
@@ -756,6 +761,7 @@ envs:
             ]),
             ui_scale: None,
             video_sync_offset_ms: None,
+            provider: None,
         };
 
         let mut envs = BTreeMap::new();

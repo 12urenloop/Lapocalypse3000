@@ -1,4 +1,3 @@
-use crate::deformable_image::DeformableImage;
 use crate::ffmpeg::{VideoPlayer, VideoResource, make_video};
 use crate::triangulation::{ActiveDistanceProvider, DistanceMeasurement, DistanceProviderKind};
 use bevy::ecs::system::SystemParam;
@@ -322,7 +321,6 @@ pub struct LogDistanceUiState<'w, 's> {
     _images: ResMut<'w, Assets<Image>>,
     video_resource: NonSendMut<'w, VideoResource>,
     videosprite: Query<'w, 's, (Entity, &'static mut Transform, &'static VideoSprite)>,
-    deformable: Query<'w, 's, &'static mut DeformableImage>,
     video_player: Query<'w, 's, (Entity, &'static mut VideoPlayer), With<VideoSprite>>,
 }
 
@@ -471,42 +469,6 @@ pub fn log_sidepanel_ui(ui: &mut Ui, mut commands: Commands, mut params: LogDist
             transform.rotation = Quat::from_euler(EulerRot::XYZ, rot_x, rot_y, rot_z);
             scale.y = scale.x;
             transform.scale = scale;
-        }
-
-        if let Ok(mut deformable) = params.deformable.single_mut() {
-            ui.separator();
-            ui.label("4-Corner Image Deformation");
-            ui.checkbox(&mut deformable.enabled, "Enable Drag Handles Gizmo");
-
-            ui.collapsing("Corner Coordinates (Local)", |ui| {
-                let labels = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"];
-                for i in 0..4 {
-                    ui.horizontal(|ui| {
-                        ui.label(format!("{}:", labels[i]));
-                        let cx = ui
-                            .add(
-                                egui::DragValue::new(&mut deformable.corners[i].x)
-                                    .speed(0.1)
-                                    .prefix("x: "),
-                            )
-                            .changed();
-                        let cy = ui
-                            .add(
-                                egui::DragValue::new(&mut deformable.corners[i].y)
-                                    .speed(0.1)
-                                    .prefix("y: "),
-                            )
-                            .changed();
-                        if cx || cy {
-                            deformable.is_dirty = true;
-                        }
-                    });
-                }
-            });
-
-            if ui.button("Reset Corner Quad").clicked() {
-                deformable.reset_rect();
-            }
         }
     }
     if params.state.measurements.is_empty() {

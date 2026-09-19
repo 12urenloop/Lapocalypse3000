@@ -35,7 +35,9 @@ pub struct DistanceMeasurement {
 
 /// Identifies a distance-provider implementation.  Add new variants here when
 /// you create a new provider plugin.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Deserialize, serde::Serialize,
+)]
 pub enum DistanceProviderKind {
     #[default]
     Manual,
@@ -387,8 +389,9 @@ pub struct TriangulationUiState<'w, 's> {
     state: ResMut<'w, TriangulationState>,
     provider: ResMut<'w, ActiveDistanceProvider>,
     background: Query<'w, 's, &'static mut Transform, With<BackgroundImage>>,
-    border: Query<'w, 's, (&'static mut Transform, &'static BorderRect), Without<BackgroundImage>>,
     corner_drag: ResMut<'w, CornerDragState>,
+    deformable: Query<'w, 's, &'static mut DeformableImage>,
+    windows: Query<'w, 's, &'static Window>,
 }
 
 /// egui window for editing anchor positions, distances, and provider selection.
@@ -659,8 +662,6 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
                 .speed(0.005)
                 .range(0.1..=1.0),
         );
-        let s = params.state.deformable_scale;
-        // params.border.single_mut().unwrap().0.scale = Vec3 { x: s, y: s, z: 1.0 };
     });
 
     ui.horizontal(|ui| {
@@ -729,13 +730,61 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
             transform.scale.z = params.state.bgscale;
         });
     }
+
+    if let Ok(mut deformable) = params.deformable.single_mut() {
+        ui.separator();
+        ui.heading("Deformable Image");
+        ui.label("4-Corner Image Deformation");
+        ui.checkbox(&mut deformable.enabled, "Enable Drag Handles Gizmo");
+
+        ui.collapsing("Corner Coordinates (Local)", |ui| {
+            let labels = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"];
+            for i in 0..4 {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{}:", labels[i]));
+                    let cx = ui
+                        .add(
+                            egui::DragValue::new(&mut deformable.corners[i].x)
+                                .speed(0.1)
+                                .prefix("x: "),
+                        )
+                        .changed();
+                    let cy = ui
+                        .add(
+                            egui::DragValue::new(&mut deformable.corners[i].y)
+                                .speed(0.1)
+                                .prefix("y: "),
+                        )
+                        .changed();
+                    if cx || cy {
+                        deformable.is_dirty = true;
+                    }
+                });
+            }
+        });
+
+        ui.horizontal(|ui| {
+            if ui.button("Reset Corner Quad").clicked() {
+                deformable.reset_rect();
+            }
+            if ui
+                .button("Fit 16:9 to window")
+                .on_hover_text(
+                    "Set corners to the largest 16:9 rectangle centered at (0,0) \
+                     that fits inside the current window size.",
+                )
+                .clicked()
+            {
+                if let Ok(window) = params.windows.single() {
+                    deformable.fit_16_9_to_window(Vec2::new(window.width(), window.height()));
+                }
+            }
+        });
+    }
 }
 
 #[derive(Component)]
 struct BackgroundImage; // Component for overlayed background image (map or sattelite pic of location)
-
-#[derive(Component)]
-struct BorderRect;
 
 fn setup(
     mut commands: Commands,
@@ -781,16 +830,6 @@ fn setup(
         texture: Some(image_handle.clone()),
         ..default()
     });
-
-    let border = meshes.add(Rectangle::new(1900.0, 1060.0).to_ring(20.0));
-
-    commands.spawn((
-        Mesh2d(border),
-        MeshMaterial2d(materials.add(Color::WHITE)),
-        first_pass_layer,
-        BorderRect,
-        Transform::default(),
-    ));
 
     let (deformable, mesh_handle) =
         DeformableImage::new_rect(Vec2::new(192.0, 108.0), 16, &mut meshes);

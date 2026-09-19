@@ -104,6 +104,32 @@ impl DeformableImage {
         ];
         self.is_dirty = true;
     }
+
+    /// Sets the 4 corners to a 16:9 aspect ratio rectangle centered at (0,0)
+    /// that maximally fits inside `window_size` (in world units/pixels).
+    pub fn fit_16_9_to_window(&mut self, window_size: Vec2) {
+        const ASPECT: f32 = 16.0 / 9.0;
+        if window_size.x <= 0.0 || window_size.y <= 0.0 {
+            return;
+        }
+        let win_aspect = window_size.x / window_size.y;
+        let (w, h) = if win_aspect > ASPECT {
+            // Window is wider than 16:9: height is the limiting factor.
+            (window_size.y * ASPECT, window_size.y)
+        } else {
+            // Window is taller than 16:9: width is the limiting factor.
+            (window_size.x, window_size.x / ASPECT)
+        };
+        let half_w = w / 2.0;
+        let half_h = h / 2.0;
+        self.corners = [
+            Vec2::new(-half_w, half_h),  // TL
+            Vec2::new(half_w, half_h),   // TR
+            Vec2::new(half_w, -half_h),  // BR
+            Vec2::new(-half_w, -half_h), // BL
+        ];
+        self.is_dirty = true;
+    }
 }
 
 /// Tracks the mouse interaction state for corner dragging.

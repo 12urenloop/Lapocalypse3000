@@ -37,6 +37,13 @@ envs:
     ui_scale: 26.0
     video_sync_offset_ms: -234922
   kamer:
+    anchors:
+      '1':
+        x: 0.0
+        y: 0.0
+      '2':
+        x: -2.6
+        y: 0.0
     recording_name: gras1
     video_path: ./assets/gras1.mp4
     video_position:
@@ -52,12 +59,13 @@ envs:
       y: 0.0
       z: 0.0
     deformable_corners:
-    - x: -492.464
-      y: 506.25656
-    - x: 860.6828
-      y: 509.40918
-    - x: 863.7107
-      y: -499.2047
-    - x: -500.9435
-      y: -516.33844
-    ui_scale: 26.0
+    - x: -864.0
+      y: 486.0
+    - x: 864.0
+      y: 486.0
+    - x: 864.0
+      y: -486.0
+    - x: -864.0
+      y: -486.0
+    ui_scale: 100.0
+    provider: Serial

@@ -43,7 +43,7 @@ bevy = { version = "0.19.1", default-features = false, features = [
 
     # Dynamic linking
     "dynamic_linking",
-    "hotpatching"
+    # "hotpatching"
 ] }
 serde_yaml = "0.9.34"
 

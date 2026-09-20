@@ -174,7 +174,7 @@ fn parse_serial_message(text: &str) -> Option<Vec<SerialDistancePayload>> {
                 anchor_id,
                 tag_id,
                 distance,
-                timestamp: rollovers * MAX_SYSTS_MS + systs,
+                timestamp: systs,
             });
         }
     }

@@ -41,6 +41,8 @@ bevy = { version = "0.19.1", default-features = false, features = [
     "bevy_render",
     "bevy_core_pipeline",
 
+    "trace_tracy",
+
     # Dynamic linking
     "dynamic_linking",
     # "hotpatching"

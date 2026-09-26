@@ -66,7 +66,6 @@ public:
 
         txmsg.sender = cconfig.address; // set sender
         tx_marker_msg[0] = cconfig.address;
-        rxmsg->receiver = cconfig.address; // set expected receiver
     }
 
     void setup()
@@ -80,6 +79,7 @@ public:
 
         unsigned int rx_timeout = 7000;
         dwt_write32bitreg(RX_FWTO_ID, rx_timeout);
+        txmsg.msgtype = AnchorRange;
 
         // only disable RX led (green)
         // dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b000 << 6) | (0b001 << 3) | (0b001 << 0));
@@ -238,7 +238,6 @@ public:
                         Serial.println(millis());
                     }
 
-                    test_run_info((unsigned char *)dist_str);
 
                     if (!workingReceive)
                     {

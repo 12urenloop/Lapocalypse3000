@@ -53,6 +53,7 @@ uint64_t lastReceive = 0;
 unsigned long lastreport = 0;
 
 bool uwbOn = true;
+static String serialBuffer = "";
 
 void loop()
 {
@@ -66,27 +67,27 @@ void loop()
         Serial.println("send RESET to turn on UWB");
     }
 
-    // while (Serial.available()) {
-    //     char c = (char)Serial.read();
-    //     serialBuffer += c;
-    //     if (serialBuffer.length() > 64) serialBuffer = serialBuffer.substring(serialBuffer.length() - 64);
-    //     // Serial.println(serialBuffer);
+    while (Serial.available()) {
+        char c = (char)Serial.read();
+        serialBuffer += c;
+        if (serialBuffer.length() > 64) serialBuffer = serialBuffer.substring(serialBuffer.length() - 64);
+        // Serial.println(serialBuffer);
         
         
-    //     if(c != '\n') continue;
-    //     bool commanded = true;
-    //     if(serialBuffer.indexOf("AT+GETINFO") != -1){
-    //         Serial.println("");
-    //         Serial.print("INFO=");
-    //         Serial.println(INFOSTRING);
-    //     }else{
-    //         commanded = false;
-    //     }
+        if(c != '\n') continue;
+        bool commanded = true;
+        if(serialBuffer.indexOf("AT+GETINFO") != -1){
+            Serial.println("");
+            Serial.print("INFO=");
+            Serial.println(INFOSTRING);
+        }else{
+            commanded = false;
+        }
         
-    //     if(commanded){
-    //         // serialBuffer.clear();
-    //     }
-    // }
+        if(commanded){
+            // serialBuffer.clear();
+        }
+    }
 
 
     unsigned long ms = millis();

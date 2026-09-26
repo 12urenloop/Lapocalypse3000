@@ -68,6 +68,8 @@ public:
         // trim_calc_val = (TARGET_XTAL_OFFSET_VALUE_PPM_MAX + TARGET_XTAL_OFFSET_VALUE_PPM_MIN) / 2;
         // offset_ppm_calc_val = CLOCK_OFFSET_PPM_TO_RATIO * 1e6;
 
+        txmsg.msgtype = TagRangeResp;
+        txmsg.sender = config.address;
 
     }
 

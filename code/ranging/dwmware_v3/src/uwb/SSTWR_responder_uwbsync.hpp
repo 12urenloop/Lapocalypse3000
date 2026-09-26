@@ -22,9 +22,17 @@
 // layout: sender, receiver, message code, seq number 2 bytes.
 // static uint8_t rx_poll_msg[] = {0x01, 0xA0 + TAG_ID, 0xE0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes, sync timestamp 4 bytes.
-static uint8_t tx_resp_msg[] = {0xA0 + TAG_ID, 0x01, 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+// static uint8_t tx_resp_msg[] = {0xA0 + TAG_ID, 0x01, 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 // static uint8_t uCurrentTrim_val;
 
+
+
+#ifndef XTALTRIM
+#define XTALTRIM 26
+#endif
+
+TagPacket txmsg;
+AnchorPacket* rxmsg;
 class SSTWR_Responder : UWB_Common
 {
 public:
@@ -92,17 +100,16 @@ public:
 
             /* A frame has been received, read it into the local buffer. */
             frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
-            if (frame_len <= sizeof(rx_buffer))
+            if (frame_len == sizeof(AnchorPacket))
             {
                 // UART_puts("READ\r\n");
                 dwt_readrxdata(rx_buffer, frame_len, 0);
 
                 /* Check that the frame is a poll sent by "SS TWR initiator" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                // rx_buffer[ALL_MSG_SN_IDX] = 0;
-                // if (memcmp(rx_buffer + 1, rx_poll_msg + 1, ALL_MSG_COMMON_LEN - 1) == 0)
-                if (rx_buffer[1] == config.address) // if destination is our address
+                if (rx_buffer[1] == config.address && rx_buffer[2] == AnchorRange) // if destination is our address
                 {
+                    rxmsg = (AnchorPacket*)&rx_buffer;
                     // UART_puts("CHECK\r\n");
                     uint32_t resp_tx_time;
                     int ret;
@@ -122,42 +129,16 @@ public:
                     /* Write all timestamps in the final message. See NOTE 8 below. */
                     // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_POLL_RX_TS_IDX], poll_rx_ts);
                     // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], resp_tx_ts);
-                    resp_msg_set_ts(&tx_resp_msg[RES_MSG_DELAY_IDX], (uint32_t)resptime);
-                    resp_msg_set_ts(&tx_resp_msg[RESP_SYSTS_IDX], (uint32_t)(resp_tx_time + uwb_sync_offset));
+                    txmsg.resp_delay = (uint32_t)resptime;
+                    txmsg.synctime = (uint32_t) (resp_tx_time + uwb_sync_offset);
                     // resp_msg_set_ts(&tx_resp_msg[RESP_SYSTS_IDX], (uint32_t)0xF0F0);
 
                     /* Write and send the response message. See NOTE 9 below. */
                     // tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
-                    tx_resp_msg[1] = rx_buffer[0]; // receiver is the sender of the received packet
-                    dwt_writetxdata(sizeof(tx_resp_msg), tx_resp_msg, 0); /* Zero offset in TX buffer. */
-                    dwt_writetxfctrl(sizeof(tx_resp_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
+                    txmsg.receiver = rxmsg->sender;  // receiver is the sender of the received packet
+                    dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0); /* Zero offset in TX buffer. */
+                    dwt_writetxfctrl(sizeof(txmsg), 0, 1); /* Zero offset in TX buffer, ranging. */
                     ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
-                    // UART_puts("SENDING\r\n");
-
-                    // float xtalOffset_ppm;
-                    // {
-
-                    //     /* Now we read the carrier frequency offset of the remote transmitter, and convert to Parts Per Million units (ppm).
-                    //     * A positive value means the local RX clock is running faster than the remote transmitter's clock.
-                    //     * For a valid result the clock offset should be read before the receiver is re-enabled.
-                    //     */
-                    //     xtalOffset_ppm = ((float)dwt_readclockoffset()) * offset_ppm_calc_val;
-
-                    //     /* TESTING BREAKPOINT LOCATION #1 */
-
-                    //     /* Example of crystal trimming to be in the range
-                    //     * (TARGET_XTAL_OFFSET_VALUE_PPM_MIN..TARGET_XTAL_OFFSET_VALUE_PPM_MAX) out of the transmitter's crystal frequency.
-                    //     * This may be used in application, which require small offset to be present between ranging sides.
-                    //     * */
-                    //     if ((float)fabs(xtalOffset_ppm) > TARGET_XTAL_OFFSET_VALUE_PPM_MAX || (float)fabs(xtalOffset_ppm) < TARGET_XTAL_OFFSET_VALUE_PPM_MIN)
-                    //     {
-                    //         uCurrentTrim_val -= (int8_t)((trim_calc_val + xtalOffset_ppm) * AVG_TRIM_PER_PPM);
-                    //         uCurrentTrim_val &= FS_XTALT_MAX_VAL;
-
-                    //         /* Configure new Crystal Offset value */
-                    //         // dwt_setxtaltrim(uCurrentTrim_val);
-                    //     }
-                    // }
 
                     /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 10 below. */
                     if (ret == DWT_SUCCESS)
@@ -178,21 +159,15 @@ public:
                     // Serial.print("trim="); Serial.println(uCurrentTrim_val);
 
                     //syncing
-                    uint32_t resp_systs;
-                    resp_msg_get_ts(&rx_buffer[POLL_SYSTS_IDX], &resp_systs);
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
                     uint32_t systime = dwt_readsystimestamphi32();
                     uint32_t synctime = rxsystime + uwb_sync_offset;
                     // Serial.print("sent: "); Serial.println((resp_tx_time + uwb_sync_offset) / MS_TO_DWT_TIME, HEX);
-                    Serial.print("resp_systs: "); Serial.print(resp_systs / MS_TO_DWT_TIME, HEX); Serial.print(" synctime: "); Serial.println(synctime / MS_TO_DWT_TIME);
+                    Serial.print("resp_systs: "); Serial.print(rxmsg->synctime / MS_TO_DWT_TIME, HEX); Serial.print(" synctime: "); Serial.println(synctime / MS_TO_DWT_TIME);
                     Serial.print("systime: "); Serial.print(systime / MS_TO_DWT_TIME);
                     Serial.print("rx_buffer: ");
-                    // for (int i = 0; i < frame_len; i++) {
-                    //     Serial.print(rx_buffer[i], HEX);
-                    //     Serial.print(" ");
-                    // }
-                    if(resp_systs > synctime){
-                        uwb_sync_offset = resp_systs - rxsystime;
+                    if(rxmsg->synctime > synctime){
+                        uwb_sync_offset = rxmsg->synctime - rxsystime;
                         // Serial.print("UPDATE uwb_sync_offset: "); Serial.println(uwb_sync_offset / MS_TO_DWT_TIME);
                     }
 

@@ -93,7 +93,27 @@ const dwt_config_t standard_dwconfig = {
         DWT_PDOA_M0      /* PDOA mode off */
 };
 
+struct __attribute__((packed)) TagPacket{
+    uint8_t sender;
+    uint8_t receiver;
+    uint8_t msgtype;
+    uint32_t resp_delay;
+    uint16_t seq;
+    uint32_t synctime;
+};
 
+struct __attribute__((packed)) AnchorPacket{
+    uint8_t sender;
+    uint8_t receiver;
+    uint8_t msgtype;
+    uint16_t seq;
+    uint32_t synctime;
+};
+
+enum MsgType{
+    AnchorRange = 0,
+    TagRangeResp = 1,
+};
 
 class UWB_Common{
     public:

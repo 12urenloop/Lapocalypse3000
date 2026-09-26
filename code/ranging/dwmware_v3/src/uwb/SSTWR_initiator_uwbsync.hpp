@@ -19,13 +19,16 @@ struct TagState
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes, UWB sys timestamp 4 bytes.
-uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0, 1, 2, 3, 4, 0, 0};
+// uint8_t tx_poll_msg[] = {0x0 + ANCHOR_ID, 0xA1, 0xE0, 0, 0, 1, 2, 3, 4, 0, 0};
 
 // layout: sender, receiver, marker id, timestamp 4 bytes, unused 2 bytes.
 uint8_t tx_marker_msg[] = {0x0 + ANCHOR_ID, ANCHORBROADCAST, 0xE5, 0, 0, 0, 0, 0, 0};
 // layout: sender, receiver, message code, response delay 4 bytes, seq number 2 bytes, UWB sys timestamp 4 bytes.
-uint8_t rx_resp_msg[] = {0xA1, 0x0 + ANCHOR_ID, 0xE1, 1, 2, 3, 4, 0, 0, 1, 2, 3, 4, 0, 0};
 
+AnchorPacket txmsg;
+TagPacket* rxmsg;
+
+uint8_t expected_sender = 0x0;
 class SSTWR_Initiator : UWB_Common
 {
 public:
@@ -61,9 +64,9 @@ public:
             distances[i].distance = -10.0;
         }
 
-        tx_poll_msg[0] = cconfig.address; // set sender
+        txmsg.sender = cconfig.address; // set sender
         tx_marker_msg[0] = cconfig.address;
-        rx_resp_msg[1] = cconfig.address; // set expected receiver
+        rxmsg->receiver = cconfig.address; // set expected receiver
     }
 
     void setup()
@@ -87,8 +90,8 @@ public:
     void slotted_loop()
     {
         common_loop();
-        tx_poll_msg[1] = tagIDs[target_tag_ix]; // set receiver
-        rx_resp_msg[0] = tagIDs[target_tag_ix]; // expect message from receiver
+        txmsg.receiver = tagIDs[target_tag_ix]; // set receiver
+        expected_sender= tagIDs[target_tag_ix]; // expect message from receiver
         SSTWR_measuredistance();
         target_tag_ix++;
         target_tag_ix %= N_TAGS;
@@ -113,9 +116,9 @@ public:
         // Serial.print("systime: "); Serial.print(systime); Serial.print(" synctime: "); Serial.print(synctime); Serial.print(" next_tx: "); Serial.println(next_tx);
         dwt_setdelayedtrxtime(next_tx - uwb_sync_offset);
         // next_tx = 0xF0F0;
-        resp_msg_set_ts(&tx_poll_msg[POLL_SYSTS_IDX], next_tx); // set tx UWB sys timestamp in poll message for sync
-        dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0);   /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);            /* Zero offset in TX buffer, ranging. */
+        txmsg.synctime = next_tx;
+        dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0);   /* Zero offset in TX buffer. */
+        dwt_writetxfctrl(sizeof(txmsg), 0, 1);            /* Zero offset in TX buffer, ranging. */
         /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
          * set by dwt_setrxaftertxdelay() has elapsed. */
         // waitForSlot();
@@ -164,17 +167,17 @@ public:
 
             /* A frame has been received, read it into the local buffer. */
             frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
-            if (frame_len <= sizeof(rx_buffer))
+            if (frame_len == sizeof(TagPacket))
             {
-                // UART_puts("READ\r\n");
 
                 dwt_readrxdata(rx_buffer, frame_len, 0);
 
                 /* Check that the frame is the expected response from the companion "SS TWR responder" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                // rx_buffer[ALL_MSG_SN_IDX] = 0;
-                if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
+                if (rx_buffer[0] == expected_sender && rx_buffer[1] == config.address && rx_buffer[2] == TagRangeResp)
                 {
+                    rxmsg = (TagPacket*)rx_buffer;
+
                     uint32_t poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
                     uint32_t uint_rtd_resp;
                     int32_t rtd_init, rtd_resp;
@@ -193,20 +196,13 @@ public:
                     uint64_t rxms = millis();
 
                     /* Get timestamps embedded in response message. */
-                    // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
-                    // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
-                    resp_msg_get_ts(&rx_buffer[RES_MSG_DELAY_IDX], &uint_rtd_resp);
+                    uint_rtd_resp = rxmsg->resp_delay;
                     uint32_t resp_systs;
 
-                    resp_msg_get_ts(&rx_buffer[RESP_SYSTS_IDX], &resp_systs);
+                    resp_systs = rxmsg->synctime;
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
                     uint32_t synctime = rxsystime + uwb_sync_offset;
-                    // Serial.print("resp_systs: "); Serial.print(resp_systs / MS_TO_DWT_TIME, HEX); Serial.print(" rxsystime: "); Serial.print(rxsystime / MS_TO_DWT_TIME); Serial.print(" synctime: "); Serial.println(synctime / MS_TO_DWT_TIME);
-                    // Serial.print("rx_buffer: ");
-                    // for (int i = 0; i < frame_len; i++) {
-                    //     Serial.print(rx_buffer[i], HEX);
-                    //     Serial.print(" ");
-                    // }
+
                     if (resp_systs > synctime)
                     {
                         uwb_sync_offset = resp_systs - rxsystime;
@@ -256,8 +252,6 @@ public:
                 {
                     if (UWB_DEBUG)
                         Serial.println(">no match");
-                    // Serial.println(rx_buffer[1], HEX);
-                    // Serial.println(rx_buffer[2], HEX);
                 }
             }
             else

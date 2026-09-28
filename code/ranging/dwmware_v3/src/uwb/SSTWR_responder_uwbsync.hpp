@@ -44,7 +44,6 @@ public:
     /* Timestamps of frames transmission/reception. */
     uint64_t poll_rx_ts;
     uint64_t resp_tx_ts;
-    int64_t uwb_sync_offset = 0;
     float trim_calc_val, offset_ppm_calc_val;
 
     
@@ -132,7 +131,7 @@ public:
                     // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_POLL_RX_TS_IDX], poll_rx_ts);
                     // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], resp_tx_ts);
                     txmsg.resp_delay = (uint32_t)resptime;
-                    txmsg.synctime = (uint32_t) (resp_tx_time + uwb_sync_offset);
+                    txmsg.synctime = ts_sync_base + resp_tx_time;
                     // resp_msg_set_ts(&tx_resp_msg[RESP_SYSTS_IDX], (uint32_t)0xF0F0);
 
                     /* Write and send the response message. See NOTE 9 below. */
@@ -163,16 +162,12 @@ public:
                     //syncing
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
                     uint32_t systime = dwt_readsystimestamphi32();
-                    uint32_t synctime = rxsystime + uwb_sync_offset;
                     // Serial.print("sent: "); Serial.println((resp_tx_time + uwb_sync_offset) / MS_TO_DWT_TIME, HEX);
-                    Serial.print("resp_systs: "); Serial.print(rxmsg->synctime / MS_TO_DWT_TIME, HEX); Serial.print(" synctime: "); Serial.println(synctime / MS_TO_DWT_TIME);
+                    Serial.print("resp_systs: "); Serial.print(rxmsg->synctime / MS_TO_DWT_TIME, HEX); Serial.print(" synctime: "); Serial.println((ts_sync_base + rxsystime) / MS_TO_DWT_TIME);
                     Serial.print("systime: "); Serial.print(systime / MS_TO_DWT_TIME);
                     Serial.print("rx_buffer: ");
-                    if(rxmsg->synctime > synctime){
-                        uwb_sync_offset = rxmsg->synctime - rxsystime;
-                        // Serial.print("UPDATE uwb_sync_offset: "); Serial.println(uwb_sync_offset / MS_TO_DWT_TIME);
-                    }
-
+                    
+                    sync_meshtime(rxmsg->synctime, rxsystime);
                     
 
                 }else{

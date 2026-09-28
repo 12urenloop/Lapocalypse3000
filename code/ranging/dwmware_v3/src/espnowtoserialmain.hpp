@@ -24,11 +24,10 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
         const TagMsg &tag = packet.tagmsgs[i];
 
         Serial.printf(
-            " | %u=%.3f@%u-%lu",
+            " | %u=%.3f@%llu",
             tag.tag_id,
             tag.distance,
-            tag.rollovers,
-            (unsigned long)tag.timestamp
+            tag.timestamp
         );
     }
     Serial.println();

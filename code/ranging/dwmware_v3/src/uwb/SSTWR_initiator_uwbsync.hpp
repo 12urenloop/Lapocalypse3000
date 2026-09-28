@@ -12,8 +12,7 @@
 struct TagState
 {
     double distance = -10.0;
-    uint32_t rollovers = 0;
-    unsigned long timestamp = 0;
+    uint64_t timestamp = 0;
     bool consumed = true;
 };
 
@@ -108,13 +107,13 @@ public:
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
         uint32_t systime = dwt_readsystimestamphi32();
         dwt_write32bitreg(SYS_TIME_ID, 0);
-        uint32_t synctime = systime + uwb_sync_offset;
+        uint64_t synctime = ts_sync_base + systime;
         uint32_t next_tx = (uint32_t)(synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME));
         if (next_tx < synctime + MS_TO_DWT_TIME * 2)
             next_tx += anchorConfig.slotIntervalMS * MS_TO_DWT_TIME;
         // uint32_t next_tx = synctime + MS_TO_DWT_TIME * 50;
         // Serial.print("systime: "); Serial.print(systime); Serial.print(" synctime: "); Serial.print(synctime); Serial.print(" next_tx: "); Serial.println(next_tx);
-        dwt_setdelayedtrxtime(next_tx - uwb_sync_offset);
+        dwt_setdelayedtrxtime(next_tx - ts_sync_base);
         // next_tx = 0xF0F0;
         txmsg.synctime = next_tx;
         dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0);   /* Zero offset in TX buffer. */
@@ -199,16 +198,8 @@ public:
                     uint_rtd_resp = rxmsg->resp_delay;
                     uint32_t resp_systs;
 
-                    resp_systs = rxmsg->synctime;
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
-                    uint32_t synctime = rxsystime + uwb_sync_offset;
-
-                    if (resp_systs > synctime)
-                    {
-                        uwb_sync_offset = resp_systs - rxsystime;
-                        Serial.print("UPDATE uwb_sync_offset: ");
-                        Serial.println(uwb_sync_offset / MS_TO_DWT_TIME);
-                    }
+                    sync_meshtime(rxmsg->synctime, rxsystime);
 
                     /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
                     rtd_init = resp_rx_ts - poll_tx_ts;
@@ -222,8 +213,7 @@ public:
                     // printf("TOF: %f \n", tof * 100000);
                     distance = tof * SPEED_OF_LIGHT;
                     distances[target_tag_ix].distance = distance;
-                    distances[target_tag_ix].timestamp = resp_systs / MS_TO_DWT_TIME;
-                    distances[target_tag_ix].rollovers = rollovers;
+                    distances[target_tag_ix].timestamp = (ts_sync_base + rxsystime) / MS_TO_DWT_TIME;
                     distances[target_tag_ix].consumed = false;
 
                     if (UWB_DEBUG)

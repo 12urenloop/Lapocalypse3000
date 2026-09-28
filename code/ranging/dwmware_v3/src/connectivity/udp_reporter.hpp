@@ -78,7 +78,7 @@ void sendData(byte* anchorIds, TagState* distances)
       for(int i = 0; i < N_TAGS; i++){
         if(distances[i].consumed) continue;
         // String data = "{\"anchor_id\":" + String(ANCHOR_ID) + ", \"tag_id\":" + String(i + 1) + ", \"distance\":" + String(distances[i]) + "}\n";  
-        data += " | " + String(i + 1) + "=" + String(distances[i].distance) + "@" + String(distances[i].rollovers) + "-" + String(distances[i].timestamp);
+        data += " | " + String(i + 1) + "=" + String(distances[i].distance) + "@" + String(distances[i].timestamp);
         distances[i].consumed = true;
       }
       data += "\n";

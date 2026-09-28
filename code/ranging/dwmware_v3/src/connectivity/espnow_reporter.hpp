@@ -40,8 +40,7 @@ struct __attribute__((packed)) PacketHeader
 
 struct __attribute__((packed)) TagMsg
 {
-    uint32_t timestamp;
-    uint16_t rollovers;
+    uint64_t timestamp;
     double distance;
     uint8_t tag_id;
 };
@@ -112,7 +111,6 @@ void sendData(byte *anchorIds, TagState *distances)
             continue;
         
         packet.tagmsgs[packetind].distance = distances[i].distance;
-        packet.tagmsgs[packetind].rollovers = distances[i].rollovers;
         packet.tagmsgs[packetind].timestamp = distances[i].timestamp;
         packet.tagmsgs[packetind].tag_id = i + 1;
         packetind++;

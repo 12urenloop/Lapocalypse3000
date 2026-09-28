@@ -99,7 +99,7 @@ struct __attribute__((packed)) TagPacket{
     uint8_t msgtype;
     uint32_t resp_delay;
     uint16_t seq;
-    uint32_t synctime;
+    uint64_t synctime;
 };
 
 struct __attribute__((packed)) AnchorPacket{
@@ -107,7 +107,7 @@ struct __attribute__((packed)) AnchorPacket{
     uint8_t receiver;
     uint8_t msgtype;
     uint16_t seq;
-    uint32_t synctime;
+    uint64_t synctime;
 };
 
 enum MsgType{
@@ -125,9 +125,8 @@ class UWB_Common{
     };
 
     Config config = {standard_dwconfig, 0x0};
-    int64_t uwb_sync_offset = 0;
     uint32_t last_systime = UINT32_MAX;
-    uint32_t rollovers = 0;
+    uint64_t ts_sync_base; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
     
 
     void setup(){
@@ -203,9 +202,17 @@ class UWB_Common{
         dwt_write32bitreg(SYS_TIME_ID, 0);
         // uint32_t synctime = systime + uwb_sync_offset;
         if(last_systime > systime){
-            rollovers ++;
+            ts_sync_base += 1 << 32; // right?
+            // rollovers ++;
         }
         last_systime = systime;
+    }
+
+    void sync_meshtime(uint64_t fullts_rx, uint32_t rx_systs){
+        uint64_t my_fullts = ts_sync_base + rx_systs;
+        if(fullts_rx > my_fullts){
+            ts_sync_base = fullts_rx - rx_systs;
+        }
     }
 
     void LEDBlinkBlocking(){

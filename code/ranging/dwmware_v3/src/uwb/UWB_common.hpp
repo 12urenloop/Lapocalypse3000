@@ -73,7 +73,8 @@ extern dwt_txconfig_t txconfig_options;
 
 /* Buffer to store received response message.
  * Its size is adjusted to longest frame that this example code is supposed to handle. */
-#define RX_BUF_LEN 16
+#define DWT_FRAME_CRC_LEN 2
+#define RX_BUF_LEN 32
 uint8_t rx_buffer[RX_BUF_LEN];
 
 /* Default communication configuration. We use default non-STS DW mode. */
@@ -117,6 +118,14 @@ enum MsgType{
 
 class UWB_Common{
     public:
+
+    // void write_tx_frame(const void* payload, uint16_t payload_len){
+    //     uint8_t frame[RX_BUF_LEN] = {};
+    //     memcpy(frame, payload, payload_len);
+    //     const uint16_t frame_len = payload_len + DWT_FRAME_CRC_LEN;
+    //     dwt_writetxdata(frame_len, frame, 0);
+    //     dwt_writetxfctrl(frame_len, 0, 1);
+    // }
     
     struct Config{
         dwt_config_t dwconfig;
@@ -125,7 +134,8 @@ class UWB_Common{
     };
 
     Config config = {standard_dwconfig, 0x0};
-    uint32_t last_systime = UINT32_MAX;
+    uint32_t last_systime = 0;
+    // uint32_t last_systime = UINT32_MAX;
     uint64_t ts_sync_base; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
     
 
@@ -203,15 +213,40 @@ class UWB_Common{
         // uint32_t synctime = systime + uwb_sync_offset;
         if(last_systime > systime){
             ts_sync_base += 1 << 32; // right?
-            // rollovers ++;
+            Serial.print("ROLLOVER: ");
+            Serial.print(systime);
+            Serial.print(" < ");
+            Serial.print(last_systime);
+            Serial.print(", now: ");
+            Serial.print(static_cast<unsigned long>((ts_sync_base + systime) / MS_TO_DWT_TIME));
+            Serial.print("\n");
         }
         last_systime = systime;
     }
 
-    void sync_meshtime(uint64_t fullts_rx, uint32_t rx_systs){
-        uint64_t my_fullts = ts_sync_base + rx_systs;
+    void sync_meshtime(uint64_t fullts_rx, uint32_t systs_at_rx){
+        if(last_systime > systs_at_rx){
+            ts_sync_base += 1 << 32; // right?
+            Serial.print("ROLLOVER: ");
+            Serial.print(systs_at_rx);
+            Serial.print(" < ");
+            Serial.print(last_systime);
+            Serial.print(", now: ");
+            Serial.print(static_cast<unsigned long>((ts_sync_base + systs_at_rx) / MS_TO_DWT_TIME));
+            Serial.print("\n");
+        }
+        uint64_t my_fullts = ts_sync_base + systs_at_rx;
+        last_systime = systs_at_rx;
+
         if(fullts_rx > my_fullts){
-            ts_sync_base = fullts_rx - rx_systs;
+            ts_sync_base = fullts_rx - systs_at_rx;
+            Serial.print("SYNC HEX: ");
+            // Serial.print(static_cast<unsigned long>(fullts_rx >> 32));
+            Serial.print(static_cast<unsigned long>(fullts_rx / MS_TO_DWT_TIME));
+            // Serial.print(static_cast<unsigned long>(fullts_rx / MS_TO_DWT_TIME));
+            Serial.print(" > ");
+            Serial.print(static_cast<unsigned long>(my_fullts / MS_TO_DWT_TIME));
+            Serial.print("\n");
         }
     }
 

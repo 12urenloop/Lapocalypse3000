@@ -1,5 +1,38 @@
 default_env: kamer
 envs:
+  beneden:
+    anchors:
+      '1':
+        x: 0.0
+        y: 0.0
+      '2':
+        x: -1.75
+        y: 0.0
+    recording_name: gras1
+    video_path: ./assets/gras1.mp4
+    video_position:
+      x: 150.0
+      y: 0.0
+      z: -0.08
+    video_scale:
+      x: 0.75
+      y: 0.75
+      z: 1.0
+    video_rotation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+    deformable_corners:
+    - x: -928.8889
+      y: 522.5
+    - x: 928.8889
+      y: 522.5
+    - x: 928.8889
+      y: -522.5
+    - x: -928.8889
+      y: -522.5
+    ui_scale: 100.0
+    provider: Serial
   gras1:
     anchors:
       '1':
@@ -39,11 +72,17 @@ envs:
   kamer:
     anchors:
       '1':
-        x: 0.0
+        x: -4.0
         y: 0.0
       '2':
-        x: -1.75
+        x: -4.0
+        y: -4.4
+      '3':
+        x: 0.0
         y: 0.0
+      '4':
+        x: 0.0
+        y: -4.3
     recording_name: gras1
     video_path: ./assets/gras1.mp4
     video_position:
@@ -59,13 +98,13 @@ envs:
       y: 0.0
       z: 0.0
     deformable_corners:
-    - x: -864.0
-      y: 486.0
-    - x: 864.0
-      y: 486.0
-    - x: 864.0
-      y: -486.0
-    - x: -864.0
-      y: -486.0
+    - x: -960.0
+      y: 540.0
+    - x: 960.0
+      y: 540.0
+    - x: 960.0
+      y: -540.0
+    - x: -960.0
+      y: -540.0
     ui_scale: 100.0
     provider: Serial

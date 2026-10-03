@@ -22,7 +22,8 @@
 #define ANCHOR1MAC {0xB0, 0xCB, 0xD8, 0xC7, 0x79, 0x48}
 
 #if ANCHOR_ID == 2
-uint8_t nextHop[] = ANCHOR1MAC;
+// uint8_t nextHop[] = ANCHOR1MAC;
+uint8_t nextHop[] = GATEWAYMAC;
 #else
 uint8_t nextHop[] = GATEWAYMAC;
 #endif

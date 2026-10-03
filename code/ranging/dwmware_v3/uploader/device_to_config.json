@@ -4,6 +4,10 @@
             "pioenv": "wemosanchor",
             "id_var": "ANCHOR_ID"
         },
+        "upesyanchor":{
+            "pioenv": "upesyanchor",
+            "id_var": "ANCHOR_ID"
+        },
         "tag":{
             "pioenv": "nrftag",
             "id_var": "TAG_ID"
@@ -12,5 +16,9 @@
             "pioenv": "serialrelay",
             "id_var": "RELAY_ID"
         }
+    },
+    "default_upload": {
+        "type": "tag",
+        "id": 1
     }
 }

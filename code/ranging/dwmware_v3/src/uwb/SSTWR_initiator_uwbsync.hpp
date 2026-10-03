@@ -9,6 +9,10 @@
 #define UWB_DEBUG true
 #endif
 
+#ifndef ANCHOR_ID
+#define ANCHOR_ID 0x0
+#endif
+
 struct TagState
 {
     double distance = -10.0;
@@ -108,7 +112,7 @@ public:
         uint32_t systime = dwt_readsystimestamphi32();
         dwt_write32bitreg(SYS_TIME_ID, 0);
         uint64_t synctime = ts_sync_base + systime;
-        uint32_t next_tx = (uint32_t)(synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME));
+        uint64_t next_tx = (uint64_t)(synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME));
         if (next_tx < synctime + MS_TO_DWT_TIME * 2)
             next_tx += anchorConfig.slotIntervalMS * MS_TO_DWT_TIME;
         // uint32_t next_tx = synctime + MS_TO_DWT_TIME * 50;
@@ -116,8 +120,11 @@ public:
         dwt_setdelayedtrxtime(next_tx - ts_sync_base);
         // next_tx = 0xF0F0;
         txmsg.synctime = next_tx;
+        Serial.print("next tx: ");
+        Serial.println(next_tx);
+        // txmsg.synctime = 0xABCDEF0123456789;
         dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0);   /* Zero offset in TX buffer. */
-        dwt_writetxfctrl(sizeof(txmsg), 0, 1);            /* Zero offset in TX buffer, ranging. */
+        dwt_writetxfctrl(sizeof(txmsg) + DWT_FRAME_CRC_LEN, 0, 1);            /* Zero offset in TX buffer, ranging. */
         /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
          * set by dwt_setrxaftertxdelay() has elapsed. */
         // waitForSlot();
@@ -166,16 +173,16 @@ public:
 
             /* A frame has been received, read it into the local buffer. */
             frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
-            if (frame_len == sizeof(TagPacket))
+            if (frame_len == sizeof(TagPacket) + DWT_FRAME_CRC_LEN)
             {
 
                 dwt_readrxdata(rx_buffer, frame_len, 0);
+                rxmsg = (TagPacket*)rx_buffer;
 
                 /* Check that the frame is the expected response from the companion "SS TWR responder" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                if (rx_buffer[0] == expected_sender && rx_buffer[1] == config.address && rx_buffer[2] == TagRangeResp)
+                if (rxmsg->sender == expected_sender && rxmsg->receiver == config.address && rxmsg->msgtype == TagRangeResp)
                 {
-                    rxmsg = (TagPacket*)rx_buffer;
 
                     uint32_t poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
                     uint32_t uint_rtd_resp;
@@ -240,13 +247,18 @@ public:
                 else
                 {
                     if (UWB_DEBUG)
-                        Serial.println(">no match");
-                }
+                        Serial.print(">no match, from: ");
+                        Serial.print(rxmsg->sender);
+                        Serial.print(", to: ");
+                        Serial.print(rxmsg->receiver);
+                        Serial.print(", type: ");
+                        Serial.print(rxmsg->msgtype);
+                    }
             }
             else
             {
                 if (UWB_DEBUG)
-                    Serial.println(">FLNOK");
+                    Serial.println(">FLNOK: " + String(frame_len));
                 Serial.print(" ");
                 Serial.print(target_tag_ix);
                 Serial.print(" ");

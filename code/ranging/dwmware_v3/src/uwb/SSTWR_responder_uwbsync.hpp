@@ -101,16 +101,16 @@ public:
 
             /* A frame has been received, read it into the local buffer. */
             frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
-            if (frame_len == sizeof(AnchorPacket))
+            if (frame_len == sizeof(AnchorPacket) + DWT_FRAME_CRC_LEN)
             {
                 // UART_puts("READ\r\n");
                 dwt_readrxdata(rx_buffer, frame_len, 0);
+                rxmsg = (AnchorPacket*)&rx_buffer;
 
                 /* Check that the frame is a poll sent by "SS TWR initiator" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                if (rx_buffer[1] == config.address && rx_buffer[2] == AnchorRange) // if destination is our address
+                if (rxmsg->receiver == config.address && rxmsg->msgtype == AnchorRange) // if destination is our address
                 {
-                    rxmsg = (AnchorPacket*)&rx_buffer;
                     // UART_puts("CHECK\r\n");
                     uint32_t resp_tx_time;
                     int ret;
@@ -137,8 +137,10 @@ public:
                     /* Write and send the response message. See NOTE 9 below. */
                     // tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
                     txmsg.receiver = rxmsg->sender;  // receiver is the sender of the received packet
-                    dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0); /* Zero offset in TX buffer. */
-                    dwt_writetxfctrl(sizeof(txmsg), 0, 1); /* Zero offset in TX buffer, ranging. */
+                    // write_tx_frame(&txmsg, sizeof(txmsg));
+                    dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0);   /* Zero offset in TX buffer. */
+                    dwt_writetxfctrl(sizeof(txmsg) + DWT_FRAME_CRC_LEN, 0, 1);            /* Zero offset in TX buffer, ranging. */
+        
                     ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
 
                     /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 10 below. */
@@ -163,8 +165,8 @@ public:
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
                     uint32_t systime = dwt_readsystimestamphi32();
                     // Serial.print("sent: "); Serial.println((resp_tx_time + uwb_sync_offset) / MS_TO_DWT_TIME, HEX);
-                    Serial.print("resp_systs: "); Serial.print(rxmsg->synctime / MS_TO_DWT_TIME, HEX); Serial.print(" synctime: "); Serial.println((ts_sync_base + rxsystime) / MS_TO_DWT_TIME);
-                    Serial.print("systime: "); Serial.print(systime / MS_TO_DWT_TIME);
+                    // Serial.print("resp_systs: "); Serial.print(rxmsg->synctime / MS_TO_DWT_TIME, HEX); Serial.print(" synctime: "); Serial.println((ts_sync_base + rxsystime) / MS_TO_DWT_TIME);
+                    Serial.print("synctime: "); Serial.print(systime / MS_TO_DWT_TIME);
                     Serial.print("rx_buffer: ");
                     
                     sync_meshtime(rxmsg->synctime, rxsystime);
@@ -172,6 +174,10 @@ public:
 
                 }else{
                     Serial.println("no match");
+                    Serial.print(">no match, from: ");
+                    Serial.print(rxmsg->receiver);
+                    Serial.print(", type: ");
+                    Serial.print(rxmsg->msgtype);
                     Serial.print("rx_buffer: ");
                     for (int i = 0; i < frame_len; i++) {
                         Serial.print(rx_buffer[i], HEX);

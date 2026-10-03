@@ -149,7 +149,7 @@ fn parse_serial_message(text: &str) -> Option<Vec<SerialDistancePayload>> {
     let anchor_id: usize = parts[0].parse().ok()?;
     let mut results = Vec::new();
 
-    let re = Regex::new(r"(\d+)=(-?\d+\.\d+)@(\d+)-(\d+)").expect("regex nocompile");
+    let re = Regex::new(r"(\d+)=(-?\d+\.\d+)@(\d+)").expect("regex nocompile");
 
     for part in parts[1..].iter() {
         if let Some(caps) = re.captures(part) {
@@ -161,11 +161,7 @@ fn parse_serial_message(text: &str) -> Option<Vec<SerialDistancePayload>> {
                 Ok(val) => val,
                 Err(_) => continue,
             };
-            let rollovers: u64 = match caps[3].parse() {
-                Ok(val) => val,
-                Err(_) => continue,
-            };
-            let systs: u64 = match caps[4].parse() {
+            let systs: u64 = match caps[3].parse() {
                 Ok(val) => val,
                 Err(_) => continue,
             };

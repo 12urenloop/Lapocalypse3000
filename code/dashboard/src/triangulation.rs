@@ -1,4 +1,7 @@
-use std::{collections::HashSet, time::Duration};
+use std::{
+    collections::{HashSet, VecDeque},
+    time::Duration,
+};
 
 use crate::{
     deformable_image::{CornerDragMode, CornerDragState, DeformableGizmos, DeformableImage},
@@ -112,6 +115,12 @@ impl Plugin for TriangulationPlugin {
 // ---------------------------------------------------------------------------
 // Triangulation state
 // ---------------------------------------------------------------------------
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TrailPoint {
+    pub pos: Vec2,
+    pub time: f32,
+}
+
 #[derive(Default)]
 pub struct TagState {
     pub distances: HashMap<usize, (Option<f32>, u64)>,
@@ -121,6 +130,7 @@ pub struct TagState {
     pub show_radii: bool,
     pub use_second_solution: bool,
     pub ratemonitor: RateMonitor,
+    pub trail: VecDeque<TrailPoint>,
 }
 
 /// Holds anchor positions, measured distances, and the computed result.
@@ -138,6 +148,8 @@ pub struct TriangulationState {
     pub use_lut: bool,
     pub lut: Vec<(f32, f32)>, // (measured, actual)
     pub deformable_scale: f32,
+    pub show_trails: bool,
+    pub trail_duration: f32, // seconds of position history to keep/draw
 }
 
 fn apply_lut(distance: f32, lut: &[(f32, f32)]) -> f32 {
@@ -226,6 +238,8 @@ impl Default for TriangulationState {
                 (101., 107.),
             ],
             deformable_scale: 1.0,
+            show_trails: true,
+            trail_duration: 7.0,
         }
 
         // (0.0, 0.0),
@@ -272,6 +286,7 @@ fn consume_distance_events(
             show_radii: false,
             use_second_solution: false,
             ratemonitor: RateMonitor::new(Duration::from_secs(2)),
+            trail: VecDeque::new(),
         });
         if let Some(oldsample) = tagstate.distances.get(&ev.anchor_id) {
             tagstate.lastdistances.insert(ev.anchor_id, *oldsample);
@@ -392,6 +407,7 @@ pub struct TriangulationUiState<'w, 's> {
     corner_drag: ResMut<'w, CornerDragState>,
     deformable: Query<'w, 's, &'static mut DeformableImage>,
     windows: Query<'w, 's, &'static Window>,
+    time: Res<'w, Time>,
 }
 
 /// egui window for editing anchor positions, distances, and provider selection.
@@ -490,6 +506,8 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
     let anchors_clone = params.state.anchors.clone(); // Clone to avoid multiple borrow issues
     let use_lut = params.state.use_lut;
     let lut = params.state.lut.clone();
+    let now = params.time.elapsed_secs();
+    let trail_duration = params.state.trail_duration;
 
     for (tag_id, tagstate) in params.state.tagstates.iter_mut() {
         ui.label(format!(
@@ -634,6 +652,30 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
             tagstate.estimated_position = None;
         }
 
+        // ----- Trail history -----
+        // Record the freshly solved position, then prune anything older
+        // than the configured window so the trail is ~`trail_duration` long.
+        if let Some(pos) = tagstate.estimated_position {
+            let should_push = match tagstate.trail.back() {
+                None => true,
+                Some(last) => now - last.time >= 0.05,
+            };
+            if should_push {
+                tagstate.trail.push_back(TrailPoint { pos, time: now });
+            }
+        }
+        while let Some(front) = tagstate.trail.front() {
+            if now - front.time > trail_duration {
+                tagstate.trail.pop_front();
+            } else {
+                break;
+            }
+        }
+        // Hard cap so a huge duration can't grow memory unbounded.
+        while tagstate.trail.len() > 4096 {
+            tagstate.trail.pop_front();
+        }
+
         if let Some(pos) = tagstate.estimated_position {
             ui.label(format!("Estimated Position: ({:.3}, {:.3})", pos.x, pos.y));
         } else {
@@ -692,6 +734,21 @@ pub fn triangulation_ui(ui: &mut Ui, mut params: TriangulationUiState) {
     });
 
     ui.checkbox(&mut params.state.show_extradebug, "Show debug UI");
+    ui.checkbox(&mut params.state.show_trails, "Show trails");
+
+    ui.horizontal(|ui| {
+        ui.label("Trail history (s):");
+        ui.add(
+            egui::DragValue::new(&mut params.state.trail_duration)
+                .speed(0.1)
+                .range(0.0..=120.0),
+        );
+        if ui.button("Clear").clicked() {
+            for tagstate in params.state.tagstates.values_mut() {
+                tagstate.trail.clear();
+            }
+        }
+    });
 
     if ui.button("Auto scale").clicked() {
         // Maximum distance between 2 points for auto scaling
@@ -843,7 +900,11 @@ fn setup(
 }
 
 /// Draw anchors, distance circles, and the estimated position using gizmos.
-fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos<DeformableGizmos>) {
+fn draw_triangulation(
+    state: Res<TriangulationState>,
+    time: Res<Time>,
+    mut gizmos: Gizmos<DeformableGizmos>,
+) {
     let s = state.scale;
     let mut avg_pos = Vec2::new(0.0, 0.0);
     for (&id, &pos) in state.anchors.iter() {
@@ -905,6 +966,24 @@ fn draw_triangulation(state: Res<TriangulationState>, mut gizmos: Gizmos<Deforma
         }
 
         let mut showpos = tagstate.estimated_position;
+
+        // --- Trail (position history) ---
+        if state.show_trails && state.trail_duration > 0.0 && tagstate.trail.len() >= 2 {
+            let now = time.elapsed_secs();
+            let hue = (((tag_id + 4) as f32) * 137.5) % 360.0;
+            for i in 1..tagstate.trail.len() {
+                let a = tagstate.trail[i - 1];
+                let b = tagstate.trail[i];
+                let age = now - b.time;
+                if age > state.trail_duration {
+                    continue;
+                }
+                let frac = (1.0 - age / state.trail_duration).clamp(0.0, 1.0);
+                let alpha = 0.05 + 0.65 * frac;
+                let color = Color::hsla(hue, 0.8, 0.55, alpha);
+                gizmos.line_2d((a.pos - avg_pos) * s, (b.pos - avg_pos) * s, color);
+            }
+        }
 
         // --- Solutions ---
         // For exactly 2 anchors we might have 2 exact solutions, dim one if we want

@@ -24,13 +24,13 @@ void setup()
 {
     Serial.begin(115200);
     Serial.println("STARTUP");
-    delay(4000);
     Serial.println("LAPOCALYPSE3000 ANCHOR");
-
+    
     Serial.print("ANCHOR ID: ");
     Serial.println(ANCHOR_ID);
     Serial.print("BOARD ID: ");
     Serial.println(BOARD);
+    delay(1000);
 
     UWBInitiator.setup();
 

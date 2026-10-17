@@ -108,13 +108,16 @@ void sendData(byte *anchorIds, TagState *distances)
     int packetind = 0;
     for (int i = 0; i < N_TAGS; i++)
     {
-        if (distances[i].consumed)
+        if (distances[i].size <= 0)
             continue;
         
-        packet.tagmsgs[packetind].distance = distances[i].distance;
+        packet.tagmsgs[packetind].distance = distances[i].distances[distances[i].size - 1];
+        // packet.tagmsgs[packetind].distance = filterDistance(&distances[i]);
         packet.tagmsgs[packetind].timestamp = distances[i].timestamp;
         packet.tagmsgs[packetind].tag_id = i + 1;
         packetind++;
+
+        distances[i].size = 0;
     }
 
     if(packetind >= 1){

@@ -13,11 +13,16 @@
 #define ANCHOR_ID 0x0
 #endif
 
+#define DISTBUFSIZE 5
+
+
+//test
 struct TagState
 {
-    double distance = -10.0;
+    double distances[DISTBUFSIZE] = {-10.0, -10.0, -10.0, -10.0, -10.0};
     uint64_t timestamp = 0;
     bool consumed = true;
+    uint8_t size = 0;
 };
 
 /* Frames used in the ranging process. See NOTE 3 below. */
@@ -64,7 +69,8 @@ public:
 
         for (int i = 0; i < N_TAGS; i++)
         {
-            distances[i].distance = -10.0;
+            for(int j = 0; j < DISTBUFSIZE; j++)
+                distances[i].distances[j] = -10.0;
         }
 
         txmsg.sender = cconfig.address; // set sender
@@ -219,7 +225,8 @@ public:
                     tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
                     // printf("TOF: %f \n", tof * 100000);
                     distance = tof * SPEED_OF_LIGHT;
-                    distances[target_tag_ix].distance = distance;
+                    distances[target_tag_ix].distances[distances[target_tag_ix].size % DISTBUFSIZE] = distance;
+                    distances[target_tag_ix].size ++;
                     distances[target_tag_ix].timestamp = (ts_sync_base + rxsystime) / MS_TO_DWT_TIME;
                     distances[target_tag_ix].consumed = false;
 
@@ -281,3 +288,42 @@ public:
         }
     }
 };
+
+double filterDistance(TagState* tagstate){
+    if(tagstate->size == 0)
+        return -10.0;
+    double max = tagstate->distances[0];
+    size_t maxi = 0;
+
+    size_t size = min((uint8_t)DISTBUFSIZE, tagstate->size);
+    Serial.print("buffer size: ");
+    Serial.print(size);
+    Serial.print(" = ");
+    for(size_t i = 0; i < size; i++){
+        Serial.print(tagstate->distances[i]);
+        Serial.print(", ");
+        if(tagstate->distances[i] > max){
+            max = tagstate->distances[i];
+            maxi = i;
+        } 
+    }
+
+    double min = tagstate->distances[0];
+    size_t mini = 0;
+    for(size_t i = 1; i < size; i++){
+        if(tagstate->distances[i] < min){
+            min = tagstate->distances[i];
+            mini = i;
+        } 
+    }
+
+    if(size <= 2) return min;
+
+    double sum = 0.0;
+    for(size_t i = 1; i < size; i++){
+        if(i == mini || i == maxi) continue;
+        sum += tagstate->distances[i];
+    }
+
+    return sum / (size - 2);
+}

@@ -156,24 +156,17 @@ public:
                         
                         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
                         frame_seq_nb++;
+                    }else{
+                        Serial.print("TX FAILED: RESULT ="); Serial.println(ret);
                     }
-                    Serial.print("ret="); Serial.println(ret);
-                    // Serial.print("xtal="); Serial.println(xtalOffset_ppm);
-                    // Serial.print("trim="); Serial.println(uCurrentTrim_val);
 
                     //syncing
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
                     uint32_t systime = dwt_readsystimestamphi32();
-                    // Serial.print("sent: "); Serial.println((resp_tx_time + uwb_sync_offset) / MS_TO_DWT_TIME, HEX);
-                    // Serial.print("resp_systs: "); Serial.print(rxmsg->synctime / MS_TO_DWT_TIME, HEX); Serial.print(" synctime: "); Serial.println((ts_sync_base + rxsystime) / MS_TO_DWT_TIME);
-                    Serial.print("synctime: "); Serial.print(systime / MS_TO_DWT_TIME);
-                    Serial.print("rx_buffer: ");
-                    
                     sync_meshtime(rxmsg->synctime, rxsystime);
                     
 
                 }else{
-                    Serial.println("no match");
                     Serial.print(">no match, from: ");
                     Serial.print(rxmsg->receiver);
                     Serial.print(", type: ");

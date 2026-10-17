@@ -212,41 +212,39 @@ class UWB_Common{
         dwt_write32bitreg(SYS_TIME_ID, 0);
         // uint32_t synctime = systime + uwb_sync_offset;
         if(last_systime > systime){
-            ts_sync_base += 1 << 32; // right?
-            Serial.print("ROLLOVER: ");
-            Serial.print(systime);
-            Serial.print(" < ");
-            Serial.print(last_systime);
-            Serial.print(", now: ");
-            Serial.print(static_cast<unsigned long>((ts_sync_base + systime) / MS_TO_DWT_TIME));
-            Serial.print("\n");
+            ts_sync_base += (uint64_t{1} << 32); // right?
+            // Serial.print("ROLLOVER: ");
+            // Serial.print(systime);
+            // Serial.print(" < ");
+            // Serial.print(last_systime);
+            // Serial.print(", now: ");
+            // Serial.print(static_cast<unsigned long>((ts_sync_base + systime) / MS_TO_DWT_TIME));
+            // Serial.print("\n");
         }
         last_systime = systime;
     }
 
     void sync_meshtime(uint64_t fullts_rx, uint32_t systs_at_rx){
         if(last_systime > systs_at_rx){
-            ts_sync_base += 1 << 32; // right?
-            Serial.print("ROLLOVER: ");
-            Serial.print(systs_at_rx);
-            Serial.print(" < ");
-            Serial.print(last_systime);
-            Serial.print(", now: ");
-            Serial.print(static_cast<unsigned long>((ts_sync_base + systs_at_rx) / MS_TO_DWT_TIME));
-            Serial.print("\n");
+            ts_sync_base += (uint64_t{1} << 32); // right?
+            // Serial.print("ROLLOVER: ");
+            // Serial.print(systs_at_rx);
+            // Serial.print(" < ");
+            // Serial.print(last_systime);
+            // Serial.print(", now: ");
+            // Serial.print(static_cast<unsigned long>((ts_sync_base + systs_at_rx) / MS_TO_DWT_TIME));
+            // Serial.print("\n");
         }
         uint64_t my_fullts = ts_sync_base + systs_at_rx;
         last_systime = systs_at_rx;
 
         if(fullts_rx > my_fullts){
             ts_sync_base = fullts_rx - systs_at_rx;
-            Serial.print("SYNC HEX: ");
-            // Serial.print(static_cast<unsigned long>(fullts_rx >> 32));
-            Serial.print(static_cast<unsigned long>(fullts_rx / MS_TO_DWT_TIME));
+            // Serial.print("SYNC HEX: ");
             // Serial.print(static_cast<unsigned long>(fullts_rx / MS_TO_DWT_TIME));
-            Serial.print(" > ");
-            Serial.print(static_cast<unsigned long>(my_fullts / MS_TO_DWT_TIME));
-            Serial.print("\n");
+            // Serial.print(" > ");
+            // Serial.print(static_cast<unsigned long>(my_fullts / MS_TO_DWT_TIME));
+            // Serial.print("\n");
         }
     }
 

@@ -95,7 +95,7 @@ void loop()
     {
         delay(ANCHOR_ID * 5);
         sendData(UWBInitiator.tagIDs, UWBInitiator.distances);
-        Serial.print("report delta = ");
+        Serial.print("loopms = ");
         Serial.println(millis() - lastreport);
         lastreport = millis();
     }

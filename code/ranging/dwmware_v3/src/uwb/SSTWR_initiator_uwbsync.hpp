@@ -121,38 +121,29 @@ public:
         uint64_t next_tx = (uint64_t)(synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME));
         if (next_tx < synctime + MS_TO_DWT_TIME * 2)
             next_tx += anchorConfig.slotIntervalMS * MS_TO_DWT_TIME;
-        // uint32_t next_tx = synctime + MS_TO_DWT_TIME * 50;
-        // Serial.print("systime: "); Serial.print(systime); Serial.print(" synctime: "); Serial.print(synctime); Serial.print(" next_tx: "); Serial.println(next_tx);
         dwt_setdelayedtrxtime(next_tx - ts_sync_base);
-        // next_tx = 0xF0F0;
         txmsg.synctime = next_tx;
         Serial.print("next tx: ");
         Serial.println(next_tx);
-        // txmsg.synctime = 0xABCDEF0123456789;
         dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0);   /* Zero offset in TX buffer. */
         dwt_writetxfctrl(sizeof(txmsg) + DWT_FRAME_CRC_LEN, 0, 1);            /* Zero offset in TX buffer, ranging. */
         /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
          * set by dwt_setrxaftertxdelay() has elapsed. */
-        // waitForSlot();
 
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
         int ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
         if (ret != 0)
         {
-            Serial.print("ret=");
+            Serial.print("RANGE SEND FAILED, send result =");
             Serial.println(ret);
             delay(100);
             return;
         }
 
-        // Serial.print("sent: "); Serial.println(next_tx / MS_TO_DWT_TIME, HEX);
-
         /* Poll DW IC until TX frame sent event set. See NOTE 6 below. */
         while (!(status_reg = dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK))
         {
         };
-        Serial.print("loop ms: ");
-        Serial.println(millis() - lastms);
         lastms = millis();
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
 
@@ -164,18 +155,13 @@ public:
         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
         frame_seq_nb++;
 
-        // Serial.printf("stat: %#010x\n", status_reg); // print hex
-        // snprintf(dist_str, sizeof(dist_str), "stat: %#010x\n", status_reg);
-
         if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
         {
-            // UART_puts("RX\r\n");
 
             uint32_t frame_len;
 
             /* Clear good RX frame event in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
-            // UART_puts("RECV\r\n");
 
             /* A frame has been received, read it into the local buffer. */
             frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
@@ -185,8 +171,6 @@ public:
                 dwt_readrxdata(rx_buffer, frame_len, 0);
                 rxmsg = (TagPacket*)rx_buffer;
 
-                /* Check that the frame is the expected response from the companion "SS TWR responder" example.
-                 * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
                 if (rxmsg->sender == expected_sender && rxmsg->receiver == config.address && rxmsg->msgtype == TagRangeResp)
                 {
 
@@ -202,9 +186,6 @@ public:
                     /* Read carrier integrator value and calculate clock offset ratio. See NOTE 11 below. */
                     clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
 
-                    // RX done, turn receiver on again if marks are enabled
-                    // startMarkRX();
-
                     uint64_t rxms = millis();
 
                     /* Get timestamps embedded in response message. */
@@ -216,28 +197,24 @@ public:
 
                     /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
                     rtd_init = resp_rx_ts - poll_tx_ts;
-                    // rtd_resp = resp_tx_ts - poll_rx_ts;
                     rtd_resp = uint_rtd_resp;
 
-                    // printf("rtd_resp: %d \n", rtd_init);
-                    // printf("rtd_resp: %d \n", rtd_resp);
-
                     tof = ((rtd_init - rtd_resp * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
-                    // printf("TOF: %f \n", tof * 100000);
                     distance = tof * SPEED_OF_LIGHT;
                     distances[target_tag_ix].distances[distances[target_tag_ix].size % DISTBUFSIZE] = distance;
                     distances[target_tag_ix].size ++;
                     distances[target_tag_ix].timestamp = (ts_sync_base + rxsystime) / MS_TO_DWT_TIME;
                     distances[target_tag_ix].consumed = false;
-
-                    if (UWB_DEBUG)
+                    
+                    // IMPORTANT: THIS IS DISABLED TO MAKE RANGING FASTER
+                    if (false && UWB_DEBUG)
                     {
                         Serial.print("= ");
                         Serial.print(target_tag_ix);
                         Serial.print(" ");
                         Serial.print((long)(distance * 100.0));
                         Serial.print(" mesh ");
-                        Serial.print(synctime / MS_TO_DWT_TIME);
+                        Serial.print(txmsg.synctime / MS_TO_DWT_TIME);
                         Serial.print(" ");
                         Serial.println(millis());
                     }
@@ -253,7 +230,7 @@ public:
                 }
                 else
                 {
-                    if (UWB_DEBUG)
+                    if (UWB_DEBUG){
                         Serial.print(">no match, from: ");
                         Serial.print(rxmsg->sender);
                         Serial.print(", to: ");
@@ -261,12 +238,13 @@ public:
                         Serial.print(", type: ");
                         Serial.print(rxmsg->msgtype);
                     }
+                }
             }
             else
             {
                 if (UWB_DEBUG)
                     Serial.println(">FLNOK: " + String(frame_len));
-                Serial.print(" ");
+                Serial.print(" tag ");
                 Serial.print(target_tag_ix);
                 Serial.print(" ");
                 // Serial.println(anchorConfig.meshClock.meshMillis()); //TODO add UWB mesh millis
@@ -296,9 +274,9 @@ double filterDistance(TagState* tagstate){
     size_t maxi = 0;
 
     size_t size = min((uint8_t)DISTBUFSIZE, tagstate->size);
-    Serial.print("buffer size: ");
-    Serial.print(size);
-    Serial.print(" = ");
+    // Serial.print("buffer size: ");
+    // Serial.print(size);
+    // Serial.print(" = ");
     for(size_t i = 0; i < size; i++){
         Serial.print(tagstate->distances[i]);
         Serial.print(", ");

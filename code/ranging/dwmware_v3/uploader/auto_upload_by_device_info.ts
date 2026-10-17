@@ -98,6 +98,10 @@ Config (${defaultConfigPath}):
 Each upload programs two defines on top of platformio.ini build flags:
   -D<id_var>=<id>  and  -DINFOSTRING="\\"type=<type>,id=<id>\\""
 so AT+GETINFO answers e.g.  INFO=type=anchor,id=1.
+These are passed via PLATFORMIO_BUILD_SRC_FLAGS (applied to the project's
+src/ files only) and pio is run with --disable-auto-clean, so switching
+between devices recompiles just the project sources while the Arduino
+framework/libraries stay cached.
 After each real upload the device is re-queried and the reported INFO is
 compared against the expected INFOSTRING (skip with --no-verify).
 Ports with no/unknown INFO use default_upload when set, otherwise fail
@@ -415,11 +419,15 @@ async function uploadWithPlatformio(
         env,
         "--upload-port",
         portPath,
+        // Changing only the per-device flags still changes PlatformIO's
+        // project checksum, and without this flag `pio run` would wipe the
+        // whole .pio/build directory (framework included) on every device.
+        "--disable-auto-clean",
     ];
     const prettyFlags = buildFlags.join(" ");
     console.log(`[upload] platformio ${pioArgs.join(" ")}`);
     if (prettyFlags) {
-        console.log(`[upload] PLATFORMIO_BUILD_FLAGS=${prettyFlags}`);
+        console.log(`[upload] PLATFORMIO_BUILD_SRC_FLAGS=${prettyFlags}`);
     }
     if (dryRun) {
         console.log("[upload] dry-run: skipping platformio invocation.");
@@ -431,8 +439,13 @@ async function uploadWithPlatformio(
             stdio: "inherit",
             env: {
                 ...process.env,
+                // Use build_src_flags (src/ only) rather than build_flags
+                // (everywhere). These per-device defines only affect project
+                // sources, so scoping them to src/ lets PlatformIO reuse the
+                // cached framework/library objects instead of rebuilding the
+                // whole Arduino framework for every device.
                 ...(prettyFlags
-                    ? { PLATFORMIO_BUILD_FLAGS: prettyFlags }
+                    ? { PLATFORMIO_BUILD_SRC_FLAGS: prettyFlags }
                     : {}),
             },
         });

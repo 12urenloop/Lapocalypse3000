@@ -1,0 +1,17 @@
+Function,nRF52833 GPIO,Microcontroller digital pin,Nordic GPIO linear,DW3110 signal,Confidence,Source
+SPI SCK,P0.03,3,3,SPICLK,Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr boards/qorvo/decawave_dwm3001cdk
+SPI MOSI,P0.08,8,8,SPIMOSI,Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr boards/qorvo/decawave_dwm3001cdk
+SPI MISO,P0.29,29,29,SPIMISO,Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr boards/qorvo/decawave_dwm3001cdk
+SPI CSN,P1.06,38,38,SPICSn,Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr boards/qorvo/decawave_dwm3001cdk
+Interrupt,P1.02,34,34,IRQ,Verified,Qorvo DWM3001CDK firmware custom_board.h
+Reset,P0.25,25,25,RSTn,Verified,Qorvo DWM3001CDK firmware custom_board.h
+Wake-up,P1.19,none,none,WAKEUP,Unverified (P1.19 has no nRF52833 GPIO),Qorvo DWM3001CDK firmware custom_board.h lists it but it is not representable on nRF52833; not needed - app never puts the DW3110 to sleep
+UART0 console RX,P0.15,15,15,N/A (board: J-Link OB VCOM),Verified,Qorvo DWM3001CDK firmware custom_board.h RX_PIN_NUMBER; Zephyr dwm3001cdk pinctrl
+UART0 console TX,P0.19,19,19,N/A (board: J-Link OB VCOM),Verified,Qorvo DWM3001CDK firmware custom_board.h TX_PIN_NUMBER; Zephyr dwm3001cdk pinctrl
+LED green D9,P0.04,4,4,N/A (board LED),Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr dwm3001cdk dts
+LED blue D10,P0.05,5,5,N/A (board LED),Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr dwm3001cdk dts
+LED red D11,P0.22,22,22,N/A (board LED),Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr dwm3001cdk dts
+LED red D12,P0.14,14,14,N/A (board LED),Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr dwm3001cdk dts
+Button SW2,P0.02,2,2,N/A (board),Verified,Qorvo DWM3001CDK firmware custom_board.h; Zephyr dwm3001cdk dts (SW1/P0.18 is nRESET)
+I2C SDA (LIS2DH12),P0.24,24,24,N/A (board),Verified,Zephyr dwm3001cdk pinctrl
+I2C SCL (LIS2DH12),P1.04,36,36,N/A (board),Verified,Zephyr dwm3001cdk pinctrl

@@ -13,7 +13,7 @@
 
 
 SSTWR_Initiator::Config anchorconfig = {
-        50, 50 / N_ANCHORS, true
+        24, 24 / N_ANCHORS, true
     };
 
 SSTWR_Initiator UWBInitiator = 
@@ -22,6 +22,9 @@ SSTWR_Initiator UWBInitiator =
 
 void setup()
 {
+#if BOARD==DWM3001C
+    Serial.setPins(15, 19);
+#endif
     Serial.begin(115200);
     Serial.println("STARTUP");
     Serial.println("LAPOCALYPSE3000 ANCHOR");
@@ -93,7 +96,7 @@ void loop()
     unsigned long ms = millis();
     if (ms - lastreport >= 175)
     {
-        delay(ANCHOR_ID * 5);
+        delay(ANCHOR_ID);
         sendData(UWBInitiator.tagIDs, UWBInitiator.distances);
         Serial.print("loopms = ");
         Serial.println(millis() - lastreport);

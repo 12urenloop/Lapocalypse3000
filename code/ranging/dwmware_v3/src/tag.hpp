@@ -15,6 +15,9 @@ SSTWR_Responder uwb_responder = SSTWR_Responder({standard_dwconfig, 0xA0 + TAG_I
 
 void setup()
 {
+// #if BOARD==DWM3001C
+//     Serial.setPins(15, 19);
+// #endif
     Serial.begin(115200);
     Serial.println("LAPOCALYPSE3000 TAG");
 

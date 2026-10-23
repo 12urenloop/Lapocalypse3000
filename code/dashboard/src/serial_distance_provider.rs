@@ -22,7 +22,7 @@ pub struct SerialDistanceProviderConfig {
 impl Default for SerialDistanceProviderConfig {
     fn default() -> Self {
         Self {
-            port: "/dev/ttyUSB0".to_string(),
+            port: "/dev/ttyUSB2".to_string(),
             baud_rate: 115200,
         }
     }

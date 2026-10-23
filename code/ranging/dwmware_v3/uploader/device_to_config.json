@@ -17,7 +17,7 @@
             "id_var": "RELAY_ID"
         }
     },
-    "default_upload": {
+    "DISABLED_default_upload": {
         "type": "tag",
         "id": 1
     }

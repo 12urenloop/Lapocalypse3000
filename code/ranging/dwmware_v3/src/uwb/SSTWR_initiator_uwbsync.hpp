@@ -36,6 +36,9 @@ uint8_t tx_marker_msg[] = {0x0 + ANCHOR_ID, ANCHORBROADCAST, 0xE5, 0, 0, 0, 0, 0
 AnchorPacket txmsg;
 TagPacket* rxmsg;
 
+uint16_t primes[20] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
+                       31, 37, 41, 43, 47, 53, 59, 61, 67, 71};
+
 uint8_t expected_sender = 0x0;
 class SSTWR_Initiator : UWB_Common
 {
@@ -59,6 +62,7 @@ public:
     uint32_t lastReceive;
     bool workingReceive;
     uint32_t lastloop = millis();
+    uint32_t failedTXs = 0;
 
     SSTWR_Initiator(UWB_Common::Config cconfig, Config config, uint32_t mySlot) : anchorConfig(config)
     {
@@ -121,10 +125,16 @@ public:
         uint64_t next_tx = (uint64_t)(synctime - (synctime % (anchorConfig.slotIntervalMS * MS_TO_DWT_TIME)) + (mySlotOffsetMS * MS_TO_DWT_TIME));
         if (next_tx < synctime + MS_TO_DWT_TIME * 2)
             next_tx += anchorConfig.slotIntervalMS * MS_TO_DWT_TIME;
-        dwt_setdelayedtrxtime(next_tx - ts_sync_base);
+        
+        if(next_tx - ts_sync_base <= UINT32_MAX)
+            dwt_setdelayedtrxtime(next_tx - ts_sync_base);
+        else{
+            dwt_setdelayedtrxtime(next_tx - ts_sync_base - (1 << 32));
+            Serial.println("NRTX");
+        }
         txmsg.synctime = next_tx;
-        Serial.print("next tx: ");
-        Serial.println(next_tx);
+        // Serial.print("next tx: ");
+        // Serial.println(next_tx);
         dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0);   /* Zero offset in TX buffer. */
         dwt_writetxfctrl(sizeof(txmsg) + DWT_FRAME_CRC_LEN, 0, 1);            /* Zero offset in TX buffer, ranging. */
         /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
@@ -132,6 +142,9 @@ public:
 
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
         int ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
+        Serial.print(". ");
+        // Serial.println(txmsg.synctime, HEX);
+        // Serial.println();
         if (ret != 0)
         {
             Serial.print("RANGE SEND FAILED, send result =");
@@ -227,6 +240,7 @@ public:
                         dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b001 << 6) | (0b001 << 3) | (0b001 << 0));
                     }
                     success = true;
+                    Serial.print(".");
                 }
                 else
                 {
@@ -242,11 +256,12 @@ public:
             }
             else
             {
-                if (UWB_DEBUG)
-                    Serial.println(">FLNOK: " + String(frame_len));
-                Serial.print(" tag ");
-                Serial.print(target_tag_ix);
-                Serial.print(" ");
+                dwt_readrxdata(rx_buffer, max(frame_len, (uint32_t)RX_BUF_LEN), 0);
+                if(frame_len == sizeof(AnchorPacket) + DWT_FRAME_CRC_LEN){
+                    Serial.println(">interference from A " + String(rx_buffer[0]) + " for tag " + String(target_tag_ix));
+                }else{
+                    Serial.println(">FLNOK: " + String(frame_len) + "for tag " + String(target_tag_ix));
+                }
                 // Serial.println(anchorConfig.meshClock.meshMillis()); //TODO add UWB mesh millis
             }
         }
@@ -264,6 +279,26 @@ public:
             /* Clear RX error/timeout events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
+
+        if(success){
+            failedTXs = 0;
+        }else{
+            failedTXs += 1;
+            if(failedTXs > 5 ){
+                Serial.print("FTX ");
+                Serial.print(failedTXs);
+                if(ts_sync_base < 10000 * MS_TO_DWT_TIME){
+                    Serial.print(" oldbase ");
+                    Serial.print(ts_sync_base / MS_TO_DWT_TIME);
+                    ts_sync_base = 10000 * MS_TO_DWT_TIME;
+                }
+                Serial.print(" base ");
+                Serial.print(ts_sync_base / MS_TO_DWT_TIME);
+                Serial.print(" - ");
+                Serial.println(primes[ANCHOR_ID]);
+                ts_sync_base -= primes[ANCHOR_ID] * MS_TO_DWT_TIME;
+            }
+        }
     }
 };
 
@@ -278,8 +313,6 @@ double filterDistance(TagState* tagstate){
     // Serial.print(size);
     // Serial.print(" = ");
     for(size_t i = 0; i < size; i++){
-        Serial.print(tagstate->distances[i]);
-        Serial.print(", ");
         if(tagstate->distances[i] > max){
             max = tagstate->distances[i];
             maxi = i;
@@ -298,7 +331,7 @@ double filterDistance(TagState* tagstate){
     if(size <= 2) return min;
 
     double sum = 0.0;
-    for(size_t i = 1; i < size; i++){
+    for(size_t i = 0; i < size; i++){
         if(i == mini || i == maxi) continue;
         sum += tagstate->distances[i];
     }

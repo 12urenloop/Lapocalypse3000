@@ -68,6 +68,7 @@ type CliOptions = {
     dryRun: boolean;
     noVerify: boolean;
     noParallel: boolean;
+    anchorOnly: boolean;
     jobs?: number;
     help: boolean;
 };
@@ -77,6 +78,8 @@ const PORT_REGEX = /^ttyUSB\d+$/;
 const DEFAULT_BAUD_RATE = 115200;
 const GETINFO_COMMAND = "AT+GETINFO\n";
 const DEFAULT_SERIAL_TIMEOUT_MS = 5500;
+// Device type selected by --anchor. Must be a key in type_to_config.
+const ANCHOR_TYPE = "anchor";
 
 const thisFile = fileURLToPath(import.meta.url);
 const thisDir = dirname(thisFile);
@@ -96,6 +99,9 @@ Usage:
   auto-upload                                    Scan /dev/ttyUSB*, query AT+GETINFO,
                                                  resolve type->pioenv via config and upload.
   auto-upload --port /dev/ttyUSB0                Query single port, resolve and upload.
+  auto-upload --anchor                           Scan all ports but only upload devices
+                                                 identified as type "anchor"; skip everything
+                                                 else (including unidentified devices).
   auto-upload --port <port> --type <t> --id <n>  Provision chosen port as type/id from config.
   auto-upload --port <port> --pioenv <env>
       [--id-var <VAR> --id <n>] [--infostring s] Upload arbitrary pioenv to chosen port.
@@ -113,6 +119,12 @@ Options:
   --config <path>     Config file (default: new_device_to_config.json).
   --jobs <n>          Max devices to build/flash concurrently (default: all).
   --no-parallel       Upload devices one after another (disable parallelism).
+  --anchor            Only upload devices whose reported type is "${ANCHOR_TYPE}".
+                      Identified non-anchor types and unidentified devices are
+                      reported as "skipped" and left untouched (default_upload
+                      is not applied for them). Skipped devices do not fail the
+                      run. Combine with --type/--port to filter manual uploads;
+                      cannot be used with --pioenv, where the type is unknown.
   --dry-run           Print what would be uploaded without running platformio.
   --no-verify         Skip the post-upload AT+GETINFO verification.
   --help              Show this help.
@@ -144,6 +156,7 @@ function parseArgs(argv: string[]): CliOptions {
         dryRun: false,
         noVerify: false,
         noParallel: false,
+        anchorOnly: false,
         help: false,
     };
     for (let i = 0; i < argv.length; i++) {
@@ -201,6 +214,9 @@ function parseArgs(argv: string[]): CliOptions {
             }
             case "--no-parallel":
                 opts.noParallel = true;
+                break;
+            case "--anchor":
+                opts.anchorOnly = true;
                 break;
             default:
                 throw new Error(`Unknown argument: ${arg}. Use --help.`);
@@ -655,17 +671,40 @@ async function performUpload(args: {
 
 function resolveAutoTarget(
     parsed: ParsedInfo,
-    config: ConfigFile
-): { type: string; id: number; origin: string } | { error: string } {
+    config: ConfigFile,
+    anchorOnly = false
+):
+    | { type: string; id: number; origin: string }
+    | { error: string }
+    | { skipped: string } {
     if (
         parsed.type !== undefined &&
         parsed.id !== undefined &&
         config.type_to_config[parsed.type]
     ) {
+        if (anchorOnly && parsed.type !== ANCHOR_TYPE) {
+            return {
+                skipped:
+                    `Identified as type="${parsed.type}", not "${ANCHOR_TYPE}" ` +
+                    `(--anchor), so it was left untouched.`,
+            };
+        }
         return {
             type: parsed.type,
             id: parsed.id,
             origin: `identified as "${parsed.raw}"`,
+        };
+    }
+    if (anchorOnly) {
+        // Never fall back to default_upload under --anchor: the whole point is
+        // to only touch devices that proved they are anchors.
+        const reason = !parsed.raw
+            ? "no INFO response"
+            : `unrecognized INFO "${parsed.raw}"`;
+        return {
+            skipped:
+                `Cannot confirm this is an "${ANCHOR_TYPE}" device (${reason}), ` +
+                `so it was left untouched (--anchor).`,
         };
     }
     if (config.default_upload) {
@@ -693,12 +732,13 @@ async function handleAutoPort(
     baudRate: number,
     timeoutMs: number,
     dryRun: boolean,
-    noVerify: boolean
+    noVerify: boolean,
+    anchorOnly: boolean
 ): Promise<UploadResult> {
     console.log(`\n[${portPath}] Querying device info...`);
     const payload = await queryDeviceInfo(portPath, baudRate, timeoutMs);
     if (!payload) {
-        if (config.default_upload) {
+        if (config.default_upload && !anchorOnly) {
             console.log(
                 `[${portPath}] No INFO response, using default_upload.`
             );
@@ -715,6 +755,13 @@ async function handleAutoPort(
                 origin: "no INFO response, using default_upload",
             });
         }
+        if (anchorOnly) {
+            const message =
+                `No INFO response received and --anchor only uploads devices ` +
+                `identified as "${ANCHOR_TYPE}", so this port was skipped.`;
+            console.log(`[${portPath}] ${message}`);
+            return { port: portPath, status: "skipped", message };
+        }
         const message =
             "No INFO response received and no default_upload set in config. " +
             "Provision explicitly, e.g.: --port <port> --type <type> --id <n>.";
@@ -724,7 +771,16 @@ async function handleAutoPort(
 
     console.log(`[${portPath}] INFO=${payload}`);
     const parsed = parseInfoPayload(payload);
-    const target = resolveAutoTarget(parsed, config);
+    const target = resolveAutoTarget(parsed, config, anchorOnly);
+    if ("skipped" in target) {
+        console.log(`[${portPath}] ${target.skipped}`);
+        return {
+            port: portPath,
+            deviceInfo: payload,
+            status: "skipped",
+            message: target.skipped,
+        };
+    }
     if ("error" in target) {
         console.log(`[${portPath}] ${target.error}`);
         return {
@@ -763,27 +819,49 @@ async function identifyPort(
     config: ConfigFile,
     availableEnvs: Set<string>,
     baudRate: number,
-    timeoutMs: number
-): Promise<{ target: AutoTarget } | { error: UploadResult }> {
+    timeoutMs: number,
+    anchorOnly: boolean
+): Promise<
+    { target: AutoTarget } | { error: UploadResult } | { skipped: UploadResult }
+> {
     console.log(`\n[${portPath}] Querying device info...`);
     const payload = await queryDeviceInfo(portPath, baudRate, timeoutMs);
-    if (!payload && !config.default_upload) {
-        const message =
-            "No INFO response received and no default_upload set in config. " +
-            "Provision explicitly, e.g.: --port <port> --type <type> --id <n>.";
-        console.log(`[${portPath}] ${message}`);
-        return { error: { port: portPath, status: "failed", message } };
+    if (!payload) {
+        if (config.default_upload && !anchorOnly) {
+            console.log(
+                `[${portPath}] No INFO response, using default_upload.`
+            );
+        } else if (anchorOnly) {
+            const message =
+                `No INFO response received and --anchor only uploads devices ` +
+                `identified as "${ANCHOR_TYPE}", so this port was skipped.`;
+            console.log(`[${portPath}] ${message}`);
+            return { skipped: { port: portPath, status: "skipped", message } };
+        } else {
+            const message =
+                "No INFO response received and no default_upload set in config. " +
+                "Provision explicitly, e.g.: --port <port> --type <type> --id <n>.";
+            console.log(`[${portPath}] ${message}`);
+            return { error: { port: portPath, status: "failed", message } };
+        }
     }
     if (payload) {
         console.log(`[${portPath}] INFO=${payload}`);
-    } else {
-        console.log(
-            `[${portPath}] No INFO response, using default_upload.`
-        );
     }
 
     const parsed = payload ? parseInfoPayload(payload) : { raw: "" };
-    const target = resolveAutoTarget(parsed, config);
+    const target = resolveAutoTarget(parsed, config, anchorOnly);
+    if ("skipped" in target) {
+        console.log(`[${portPath}] ${target.skipped}`);
+        return {
+            skipped: {
+                port: portPath,
+                deviceInfo: payload ?? undefined,
+                status: "skipped",
+                message: target.skipped,
+            },
+        };
+    }
     if ("error" in target) {
         console.log(`[${portPath}] ${target.error}`);
         return {
@@ -1012,6 +1090,7 @@ async function runParallelAutoUpload(args: {
     timeoutMs: number;
     dryRun: boolean;
     noVerify: boolean;
+    anchorOnly: boolean;
     jobsLimit: number;
 }): Promise<UploadResult[]> {
     const {
@@ -1022,6 +1101,7 @@ async function runParallelAutoUpload(args: {
         timeoutMs,
         dryRun,
         noVerify,
+        anchorOnly,
         jobsLimit,
     } = args;
 
@@ -1045,10 +1125,13 @@ async function runParallelAutoUpload(args: {
             config,
             availableEnvs,
             baudRate,
-            timeoutMs
+            timeoutMs,
+            anchorOnly
         );
         if ("target" in identified) {
             targets[index] = identified.target;
+        } else if ("skipped" in identified) {
+            results[index] = identified.skipped;
         } else {
             results[index] = identified.error;
         }
@@ -1359,6 +1442,21 @@ async function handleManualPort(
         if (!Number.isInteger(opts.id)) {
             throw new Error(`--id must be an integer, got: ${opts.id}`);
         }
+        if (opts.anchorOnly && opts.type !== ANCHOR_TYPE) {
+            const message =
+                `Device type "${opts.type}" is not "${ANCHOR_TYPE}" ` +
+                `(--anchor), so ${port} was left untouched.`;
+            console.log(`[${port}] ${message}`);
+            return [
+                {
+                    port,
+                    deviceType: opts.type,
+                    deviceId: opts.id,
+                    status: "skipped",
+                    message,
+                },
+            ];
+        }
         return [
             await performUpload({
                 port,
@@ -1385,7 +1483,8 @@ async function handleManualPort(
             baudRate,
             timeoutMs,
             opts.dryRun,
-            opts.noVerify
+            opts.noVerify,
+            opts.anchorOnly
         ),
     ];
 }
@@ -1407,6 +1506,14 @@ function printSummary(results: UploadResult[]): void {
 
         console.log(detail);
     }
+
+    const counts = { uploaded: 0, skipped: 0, failed: 0 };
+    for (const result of results) {
+        counts[result.status]++;
+    }
+    console.log(
+        `Totals: uploaded=${counts.uploaded} skipped=${counts.skipped} failed=${counts.failed}`
+    );
 }
 
 async function main(): Promise<void> {
@@ -1446,6 +1553,12 @@ async function main(): Promise<void> {
     if (opts.type !== undefined && opts.id === undefined) {
         throw new Error("--type <type> needs --id <n> to go with it.");
     }
+    if (opts.anchorOnly && opts.pioenv !== undefined) {
+        throw new Error(
+            "--anchor cannot be combined with --pioenv: the device type is " +
+                "unknown in that mode. Use automatic mode or --type <type> --id <n>."
+        );
+    }
 
     const configPath = opts.configPath ?? defaultConfigPath;
     const [config, availableEnvs] = await Promise.all([
@@ -1454,6 +1567,12 @@ async function main(): Promise<void> {
     ]);
     const baudRate = config.baud_rate ?? DEFAULT_BAUD_RATE;
     const timeoutMs = config.serial_timeout_ms ?? DEFAULT_SERIAL_TIMEOUT_MS;
+
+    if (opts.anchorOnly && !config.type_to_config[ANCHOR_TYPE]) {
+        throw new Error(
+            `--anchor needs a "${ANCHOR_TYPE}" entry in type_to_config (${configPath}).`
+        );
+    }
 
     console.log(`Using config: ${configPath}`);
     console.log(
@@ -1464,6 +1583,12 @@ async function main(): Promise<void> {
     if (config.default_upload) {
         console.log(
             `Default upload: type=${config.default_upload.type} id=${config.default_upload.id}`
+        );
+    }
+    if (opts.anchorOnly) {
+        console.log(
+            `Anchor-only mode: uploading only devices identified as type ` +
+                `"${ANCHOR_TYPE}"; every other port is skipped (default_upload is ignored).`
         );
     }
 
@@ -1498,7 +1623,8 @@ async function main(): Promise<void> {
                         baudRate,
                         timeoutMs,
                         opts.dryRun,
-                        opts.noVerify
+                        opts.noVerify,
+                        opts.anchorOnly
                     )
                 );
             }
@@ -1511,6 +1637,7 @@ async function main(): Promise<void> {
                 timeoutMs,
                 dryRun: opts.dryRun,
                 noVerify: opts.noVerify,
+                anchorOnly: opts.anchorOnly,
                 jobsLimit:
                     opts.jobs !== undefined && opts.jobs > 0
                         ? opts.jobs

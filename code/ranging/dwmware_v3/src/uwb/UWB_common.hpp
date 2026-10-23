@@ -4,6 +4,9 @@
 // #include <Dw3000/src/dw3000.h>
 #include <boards.hpp>
 #include <Arduino.h>
+// #if BOARD==DWM3001C
+// #define Serial Serial1
+// #endif
 
 
 #define MS_TO_DWT_TIME 249601 //249 600.639
@@ -28,6 +31,14 @@ const uint8_t PIN_SS = 5; // spi select pin
 const uint8_t PIN_RST = A2; // reset pin
 const uint8_t PIN_IRQ = 16; // irq pin
 const uint8_t PIN_SS = 15; // spi select pin
+#elif BOARD==DWM3001C
+// DWM3001CDK: DW3110 wired to the nRF52833 SPI3 (P0.03/P0.08/P0.29 via variant defaults)
+// Mapping per Qorvo DWM3001CDK firmware custom_board.h / Zephyr dwm3001cdk board dts:
+const uint8_t PIN_RST = 25; // P0.25 DW3000 reset pin (reset pin)
+const uint8_t PIN_IRQ = 34; // P1.02 DW3000 IRQ pin (only used as input, polling mode)
+const uint8_t PIN_SS = 38; // P1.06 DW3000 SPI chip select pin
+// Note: DW3110 WAKEUP is not usable from this pin map (our map covers P0.0-P1.15
+// only); not required here since the app never puts the DW3110 into sleep mode.
 #else
 const uint8_t PIN_RST = 27; // reset pin
 const uint8_t PIN_IRQ = 14; // irq pin
@@ -136,7 +147,8 @@ class UWB_Common{
     Config config = {standard_dwconfig, 0x0};
     uint32_t last_systime = 0;
     // uint32_t last_systime = UINT32_MAX;
-    uint64_t ts_sync_base; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
+    // uint64_t ts_sync_base = 0; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
+    uint64_t ts_sync_base = 10000 * MS_TO_DWT_TIME; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
     
 
     void setup(){
@@ -213,6 +225,10 @@ class UWB_Common{
         // uint32_t synctime = systime + uwb_sync_offset;
         if(last_systime > systime){
             ts_sync_base += (uint64_t{1} << 32); // right?
+            Serial.print("RLO SY: ");
+            Serial.print((uint32_t)((ts_sync_base + systime) / MS_TO_DWT_TIME / 100), HEX);
+            Serial.print(" ");
+            Serial.println((uint32_t)((ts_sync_base + systime) / MS_TO_DWT_TIME / 100));
             // Serial.print("ROLLOVER: ");
             // Serial.print(systime);
             // Serial.print(" < ");
@@ -227,6 +243,10 @@ class UWB_Common{
     void sync_meshtime(uint64_t fullts_rx, uint32_t systs_at_rx){
         if(last_systime > systs_at_rx){
             ts_sync_base += (uint64_t{1} << 32); // right?
+            Serial.print("RO SY: ");
+            Serial.print((uint32_t)((ts_sync_base + systs_at_rx) / MS_TO_DWT_TIME / 100), HEX);
+            Serial.print(" ");
+            Serial.println((uint32_t)((ts_sync_base + systs_at_rx) / MS_TO_DWT_TIME / 100));
             // Serial.print("ROLLOVER: ");
             // Serial.print(systs_at_rx);
             // Serial.print(" < ");
@@ -238,14 +258,20 @@ class UWB_Common{
         uint64_t my_fullts = ts_sync_base + systs_at_rx;
         last_systime = systs_at_rx;
 
-        if(fullts_rx > my_fullts){
+        if(fullts_rx > my_fullts && (fullts_rx - my_fullts < MS_TO_DWT_TIME * (1000 * 60 * 60 * 24 * 7))){
             ts_sync_base = fullts_rx - systs_at_rx;
+            Serial.print("SY: ");
+            Serial.print((uint32_t)((ts_sync_base + systs_at_rx) / MS_TO_DWT_TIME / 100), HEX);
+            Serial.print(" ");
+            Serial.println((uint32_t)((ts_sync_base + systs_at_rx) / MS_TO_DWT_TIME / 100));
             // Serial.print("SYNC HEX: ");
             // Serial.print(static_cast<unsigned long>(fullts_rx / MS_TO_DWT_TIME));
             // Serial.print(" > ");
             // Serial.print(static_cast<unsigned long>(my_fullts / MS_TO_DWT_TIME));
             // Serial.print("\n");
         }
+
+        // if(ts_sync_base > )
     }
 
     void LEDBlinkBlocking(){
@@ -275,3 +301,10 @@ class UWB_Common{
     }
 
 };
+
+uint32_t min(uint32_t a, uint32_t b){
+    if(a < b){
+        return a;
+    }
+    return b;
+}

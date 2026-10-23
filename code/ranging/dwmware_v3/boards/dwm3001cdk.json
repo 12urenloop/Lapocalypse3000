@@ -1,0 +1,51 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "nrf52833_s140_v7.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DARDUINO_DWM3001CDK -DNRF52833_XXAA",
+    "f_cpu": "64000000L",
+    "mcu": "nrf52833",
+    "variant": "dwm3001cdk",
+    "variants_dir": "variants",
+    "bsp": {
+      "name": "adafruit"
+    },
+    "softdevice": {
+      "sd_name": "s140",
+      "sd_version": "7.3.0",
+      "sd_fwid": "0x0123"
+    }
+  },
+  "connectivity": [
+    "bluetooth"
+  ],
+  "debug": {
+    "default_tools": [
+      "jlink"
+    ],
+    "jlink_device": "nRF52833_xxAA",
+    "onboard_tools": [
+      "jlink"
+    ],
+    "svd_path": "nrf52833.svd"
+  },
+  "frameworks": [
+    "arduino"
+  ],
+  "name": "Qorvo DWM3001CDK (nRF52833 + DW3110)",
+  "upload": {
+    "maximum_ram_size": 106496,
+    "maximum_size": 364544,
+    "protocol": "jlink",
+    "protocols": [
+      "jlink",
+      "nrfjprog"
+    ],
+    "offset_address": "0x27000"
+  },
+  "url": "https://www.qorvo.com/products/p/DWM3001CDK",
+  "vendor": "Qorvo"
+}

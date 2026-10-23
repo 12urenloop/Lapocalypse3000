@@ -111,8 +111,8 @@ void sendData(byte *anchorIds, TagState *distances)
         if (distances[i].size <= 0)
             continue;
         
-        packet.tagmsgs[packetind].distance = distances[i].distances[distances[i].size - 1];
-        // packet.tagmsgs[packetind].distance = filterDistance(&distances[i]);
+        // packet.tagmsgs[packetind].distance = distances[i].distances[distances[i].size - 1];
+        packet.tagmsgs[packetind].distance = filterDistance(&distances[i]);
         packet.tagmsgs[packetind].timestamp = distances[i].timestamp;
         packet.tagmsgs[packetind].tag_id = i + 1;
         packetind++;

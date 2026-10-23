@@ -143,6 +143,19 @@ public:
         
                     ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
 
+                    // Serial.print("B ");
+                    // Serial.print((uint32_t)(ts_sync_base >> 32), HEX);
+                    // Serial.print((uint32_t)ts_sync_base, HEX);
+
+                    // Serial.print(" S ");
+                    // Serial.print(resp_tx_time, HEX);
+
+                    // Serial.print(" | ");
+
+                    // Serial.print((uint32_t)(txmsg.synctime >> 32), HEX);
+                    // Serial.print((uint32_t)(txmsg.synctime), HEX);
+                    // Serial.println();
+
                     /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. See NOTE 10 below. */
                     if (ret == DWT_SUCCESS)
                     {
@@ -180,13 +193,30 @@ public:
                     Serial.println();
                 }
             }else{
-                Serial.println("framelen not ok");
+                Serial.print("FLNOK: ");
+                Serial.println(frame_len);
             }
         }
         else
         {
             Serial.println("RX error");
             Serial.println(status_reg);
+            // Serial.print("B ");
+            // Serial.print((uint32_t)(ts_sync_base >> 32), HEX);
+            // Serial.print((uint32_t)ts_sync_base, HEX);
+
+            // Serial.print(" S ");
+            // Serial.print(last_systime, HEX);
+
+            // Serial.print(" | ");
+
+            // Serial.print((uint32_t)((ts_sync_base + last_systime) >> 32), HEX);
+            // Serial.print((uint32_t)(ts_sync_base + last_systime), HEX);
+            // Serial.print(" | ");
+
+            // Serial.print((uint32_t)(txmsg.synctime >> 32), HEX);
+            // Serial.print((uint32_t)(txmsg.synctime), HEX);
+            // Serial.println();
             /* Clear RX error events in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
         }

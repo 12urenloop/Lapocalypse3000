@@ -78,14 +78,17 @@ public:
 
     void SSTWR_respond(){
         /* Activate reception immediately. */
-        dwt_rxenable(DWT_START_RX_IMMEDIATE);
-
-        /* Poll for reception of a frame or error/timeout. See NOTE 6 below. */
+        uint32_t frame_len;
+        int ret;
         long iters = 0;
+        uint32_t resp_tx_time;
         unsigned long startms = millis();
+        
+        /* Poll for reception of a frame or error/timeout. See NOTE 6 below. */
+        dwt_rxenable(DWT_START_RX_IMMEDIATE);
         while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR)))
         { 
-            if(iters % 100 == 0 && millis() - startms >= 1000){
+            if(iters % 1000 == 0 && millis() - startms >= 1000){
                 break;
             }
             iters ++;
@@ -93,7 +96,6 @@ public:
 
         if (status_reg & SYS_STATUS_RXFCG_BIT_MASK)
         {
-            uint32_t frame_len;
 
             /* Clear good RX frame event in the DW IC status register. */
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
@@ -104,16 +106,14 @@ public:
             if (frame_len == sizeof(AnchorPacket) + DWT_FRAME_CRC_LEN)
             {
                 // UART_puts("READ\r\n");
-                dwt_readrxdata(rx_buffer, frame_len, 0);
-                rxmsg = (AnchorPacket*)&rx_buffer;
+                dwt_readrxdata((uint8_t*)rxmsg, frame_len, 0);
+                // rxmsg = (AnchorPacket*)&rx_buffer;
 
                 /* Check that the frame is a poll sent by "SS TWR initiator" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
                 if (rxmsg->receiver == config.address && rxmsg->msgtype == AnchorRange) // if destination is our address
                 {
                     // UART_puts("CHECK\r\n");
-                    uint32_t resp_tx_time;
-                    int ret;
 
                     /* Retrieve poll reception timestamp. */
                     poll_rx_ts = get_rx_timestamp_u64();
@@ -125,24 +125,34 @@ public:
                     /* Response TX timestamp is the transmission time we programmed plus the antenna delay. */
                     resp_tx_ts = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
 
+                    
                     uint64_t resptime = resp_tx_ts - poll_rx_ts;
-
+                    
                     /* Write all timestamps in the final message. See NOTE 8 below. */
                     // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_POLL_RX_TS_IDX], poll_rx_ts);
                     // resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], resp_tx_ts);
                     txmsg.resp_delay = (uint32_t)resptime;
                     txmsg.synctime = ts_sync_base + resp_tx_time;
                     // resp_msg_set_ts(&tx_resp_msg[RESP_SYSTS_IDX], (uint32_t)0xF0F0);
-
+                    
                     /* Write and send the response message. See NOTE 9 below. */
                     // tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
                     txmsg.receiver = rxmsg->sender;  // receiver is the sender of the received packet
                     // write_tx_frame(&txmsg, sizeof(txmsg));
                     dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0);   /* Zero offset in TX buffer. */
                     dwt_writetxfctrl(sizeof(txmsg) + DWT_FRAME_CRC_LEN, 0, 1);            /* Zero offset in TX buffer, ranging. */
-        
-                    ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
+                    
+                    uint32_t now = dwt_read32bitreg(SYS_TIME_ID);
+                    uint32_t then = dwt_read32bitreg(DX_TIME_ID);
 
+                    ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
+                    uint32_t after = dwt_read32bitreg(SYS_TIME_ID);
+                    Serial.print("diff: ");
+                    int32_t diff = (int32_t)( (int64_t)then - (int64_t)now);
+                    Serial.println(diff / UUS_TO_DWT_TIME);
+                    Serial.print("diff2: ");
+                    diff = (int32_t)( (int64_t)then - (int64_t)after);
+                    Serial.println(diff / UUS_TO_DWT_TIME);
                     // Serial.print("B ");
                     // Serial.print((uint32_t)(ts_sync_base >> 32), HEX);
                     // Serial.print((uint32_t)ts_sync_base, HEX);
@@ -170,7 +180,13 @@ public:
                         /* Increment frame sequence number after transmission of the poll message (modulo 256). */
                         frame_seq_nb++;
                     }else{
-                        Serial.print("TX FAILED: RESULT ="); Serial.println(ret);
+                        dwt_writefastCMD(CMD_TXRXOFF);
+
+                        Serial.print("TX FAILED: "); Serial.println(ret);
+                        Serial.print("SYS: "); Serial.println(dwt_read32bitreg(SYS_STATE_LO_ID), HEX);
+                        uint16_t checkTxOK = dwt_read8bitoffsetreg(SYS_STATUS_ID, 3); // Read at offset 3 to get the upper 2 bytes out of 5
+                        Serial.print("ID3: "); Serial.println(checkTxOK, HEX);
+                        Serial.print("TXOK: "); Serial.println((checkTxOK & (SYS_STATUS_HPDWARN_BIT_MASK>>24)), HEX);
                     }
 
                     //syncing
@@ -180,17 +196,19 @@ public:
                     
 
                 }else{
-                    Serial.print(">no match, from: ");
-                    Serial.print(rxmsg->receiver);
-                    Serial.print(", type: ");
-                    Serial.print(rxmsg->msgtype);
-                    Serial.print("rx_buffer: ");
-                    for (int i = 0; i < frame_len; i++) {
-                        Serial.print(rx_buffer[i], HEX);
-                        Serial.print(" ");
-                    }
-                    Serial.print("comparing to "); Serial.println(config.address, HEX);
-                    Serial.println();
+                    // Serial.print(">no match, from: ");
+                    // Serial.print(rxmsg->receiver);
+                    // Serial.print(", type: ");
+                    // Serial.print(rxmsg->msgtype);
+                    // Serial.print("rx_buffer: ");
+                    // for (int i = 0; i < frame_len; i++) {
+                    //     Serial.print(rx_buffer[i], HEX);
+                    //     Serial.print(" ");
+                    // }
+                    // Serial.print("comparing to "); Serial.println(config.address, HEX);
+                    // Serial.println();
+                    Serial.print(">NM: ");
+                    Serial.println(rxmsg->receiver, HEX);
                 }
             }else{
                 Serial.print("FLNOK: ");

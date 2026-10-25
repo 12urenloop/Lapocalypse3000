@@ -22,10 +22,10 @@ to flash/monitor it.
 
 ## Serial console
 
-The CDK's only USB connector belongs to the **J-Link OB**, which bridges
-**UART0** (`P0.15` RX / `P0.19` TX) as a virtual COM port. The build therefore
-uses hardware UART0 (`Serial1`) instead of Adafruit's default USB CDC (which is
-why `Adafruit_TinyUSB_Arduino` is excluded from this env). Monitor:
+The CDK has two micro-USB connectors. This build uses **J9**, the **J-Link OB**
+connector, which bridges **UART0** (`P0.15` RX / `P0.19` TX) as a virtual COM
+port. The separate **J20** connector is the nRF52833's native USB CDC interface
+and is deliberately not used for this console. Monitor:
 
 ```
 pio device monitor -e nrftag1dwm3001c          # picks the J-Link VCOM at 115200
@@ -66,5 +66,5 @@ per device like on the feathers and add e.g. `-DXTALTRIM=xx` to this env.
 `[env:nrftag1dwm3001c]` in `platformio.ini`:
 
 - `TAG_ID=1`, `INFOSTRING="DWM3001C1"` (matches the feather tags' pattern)
-- `Serial` → `Serial1` remap happens twice: `-DSerial=Serial1` (global, also
-  covers the core's `_write` logger) and in `src/boards.hpp`
+- `Serial` → `Serial1` remap is local to `src/boards.hpp`; do not make it a
+  global `-DSerial=Serial1`, which would collide with TinyUSB's CDC declaration.

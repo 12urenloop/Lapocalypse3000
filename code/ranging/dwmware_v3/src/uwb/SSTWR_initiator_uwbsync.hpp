@@ -129,7 +129,7 @@ public:
         if(next_tx - ts_sync_base <= UINT32_MAX)
             dwt_setdelayedtrxtime(next_tx - ts_sync_base);
         else{
-            dwt_setdelayedtrxtime(next_tx - ts_sync_base - (1 << 32));
+            dwt_setdelayedtrxtime(next_tx - ts_sync_base - (1ULL << 32));
             Serial.println("NRTX");
         }
         txmsg.synctime = next_tx;
@@ -280,25 +280,25 @@ public:
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
 
-        if(success){
-            failedTXs = 0;
-        }else{
-            failedTXs += 1;
-            if(failedTXs > 5 ){
-                Serial.print("FTX ");
-                Serial.print(failedTXs);
-                if(ts_sync_base < 10000 * MS_TO_DWT_TIME){
-                    Serial.print(" oldbase ");
-                    Serial.print(ts_sync_base / MS_TO_DWT_TIME);
-                    ts_sync_base = 10000 * MS_TO_DWT_TIME;
-                }
-                Serial.print(" base ");
-                Serial.print(ts_sync_base / MS_TO_DWT_TIME);
-                Serial.print(" - ");
-                Serial.println(primes[ANCHOR_ID]);
-                ts_sync_base -= primes[ANCHOR_ID] * MS_TO_DWT_TIME;
-            }
-        }
+        // if(success){
+        //     failedTXs = 0;
+        // }else{
+        //     failedTXs += 1;
+        //     if(failedTXs > 5 ){
+        //         Serial.print("FTX ");
+        //         Serial.print(failedTXs);
+        //         if(ts_sync_base < 10000 * MS_TO_DWT_TIME){
+        //             Serial.print(" oldbase ");
+        //             Serial.print(ts_sync_base / MS_TO_DWT_TIME);
+        //             ts_sync_base = 10000 * MS_TO_DWT_TIME;
+        //         }
+        //         Serial.print(" base ");
+        //         Serial.print(ts_sync_base / MS_TO_DWT_TIME);
+        //         Serial.print(" - ");
+        //         Serial.println(primes[ANCHOR_ID]);
+        //         ts_sync_base -= primes[ANCHOR_ID] * MS_TO_DWT_TIME;
+        //     }
+        // }
     }
 };
 

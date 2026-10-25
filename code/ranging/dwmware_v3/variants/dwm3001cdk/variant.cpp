@@ -25,4 +25,15 @@ const uint32_t g_ADigitalPinMap[] =
 
 void initVariant()
 {
+  // 1. Enable Instruction Cache (huge speedup running from flash, lowers power)
+  NRF_NVMC->ICACHECNF = NVMC_ICACHECNF_CACHEEN_Enabled;
+
+  // 2. Enable DC/DC regulator (cuts MCU active current by ~30-40% compared to LDO)
+  NRF_POWER->DCDCEN = 1;
+
+  // 3. Start high-frequency external crystal (32 MHz crystal -> 64 MHz HFCLK)
+  if ((NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_SRC_Msk) != (CLOCK_HFCLKSTAT_SRC_Xtal << CLOCK_HFCLKSTAT_SRC_Pos)) {
+    NRF_CLOCK->TASKS_HFCLKSTART = 1;
+    while (NRF_CLOCK->EVENTS_HFCLKSTARTED == 0);
+  }
 }

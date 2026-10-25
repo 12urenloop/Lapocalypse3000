@@ -7,7 +7,7 @@
 #endif
 
 #define RESP_RX_TIMEOUT_UUS 400
-#define POLL_RX_TO_RESP_TX_DLY_UUS 7
+#define POLL_RX_TO_RESP_TX_DLY_UUS 8
 
 #define TARGET_XTAL_OFFSET_VALUE_PPM_MIN (2.0f)
 #define TARGET_XTAL_OFFSET_VALUE_PPM_MAX (4.0f)
@@ -106,8 +106,8 @@ public:
             if (frame_len == sizeof(AnchorPacket) + DWT_FRAME_CRC_LEN)
             {
                 // UART_puts("READ\r\n");
-                dwt_readrxdata((uint8_t*)rxmsg, frame_len, 0);
-                // rxmsg = (AnchorPacket*)&rx_buffer;
+                dwt_readrxdata(rx_buffer, frame_len, 0);
+                rxmsg = (AnchorPacket*)&rx_buffer;
 
                 /* Check that the frame is a poll sent by "SS TWR initiator" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
@@ -142,17 +142,7 @@ public:
                     dwt_writetxdata(sizeof(txmsg), (uint8_t*)&txmsg, 0);   /* Zero offset in TX buffer. */
                     dwt_writetxfctrl(sizeof(txmsg) + DWT_FRAME_CRC_LEN, 0, 1);            /* Zero offset in TX buffer, ranging. */
                     
-                    uint32_t now = dwt_read32bitreg(SYS_TIME_ID);
-                    uint32_t then = dwt_read32bitreg(DX_TIME_ID);
-
                     ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
-                    uint32_t after = dwt_read32bitreg(SYS_TIME_ID);
-                    Serial.print("diff: ");
-                    int32_t diff = (int32_t)( (int64_t)then - (int64_t)now);
-                    Serial.println(diff / UUS_TO_DWT_TIME);
-                    Serial.print("diff2: ");
-                    diff = (int32_t)( (int64_t)then - (int64_t)after);
-                    Serial.println(diff / UUS_TO_DWT_TIME);
                     // Serial.print("B ");
                     // Serial.print((uint32_t)(ts_sync_base >> 32), HEX);
                     // Serial.print((uint32_t)ts_sync_base, HEX);
@@ -193,6 +183,7 @@ public:
                     uint32_t rxsystime = dwt_readrxtimestamphi32();
                     uint32_t systime = dwt_readsystimestamphi32();
                     sync_meshtime(rxmsg->synctime, rxsystime);
+                    Serial.print(". ");
                     
 
                 }else{

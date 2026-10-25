@@ -147,8 +147,8 @@ class UWB_Common{
     Config config = {standard_dwconfig, 0x0};
     uint32_t last_systime = 0;
     // uint32_t last_systime = UINT32_MAX;
-    // uint64_t ts_sync_base = 0; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
-    uint64_t ts_sync_base = 10000 * MS_TO_DWT_TIME; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
+    uint64_t ts_sync_base = 0; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
+    // uint64_t ts_sync_base = 10000 * MS_TO_DWT_TIME; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
     
 
     void setup(){
@@ -258,7 +258,7 @@ class UWB_Common{
         uint64_t my_fullts = ts_sync_base + systs_at_rx;
         last_systime = systs_at_rx;
 
-        if(fullts_rx > my_fullts && (fullts_rx - my_fullts < MS_TO_DWT_TIME * (1000 * 60 * 60 * 24 * 7))){
+        if(fullts_rx > my_fullts && (fullts_rx - my_fullts < uint64_t{MS_TO_DWT_TIME} * 1000ULL * 60ULL * 60ULL * 24ULL)){
             ts_sync_base = fullts_rx - systs_at_rx;
             Serial.print("SY: ");
             Serial.print((uint32_t)((ts_sync_base + systs_at_rx) / MS_TO_DWT_TIME / 100), HEX);

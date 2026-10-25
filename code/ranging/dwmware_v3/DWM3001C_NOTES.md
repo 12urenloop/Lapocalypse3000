@@ -63,8 +63,9 @@ per device like on the feathers and add e.g. `-DXTALTRIM=xx` to this env.
 
 ## Environment variables
 
-`[env:nrftag1dwm3001c]` in `platformio.ini`:
+`[env:nrftag1dwm3001c]` (and alias `[env:nrftag3001c]`) in `platformio.ini`:
 
 - `TAG_ID=1`, `INFOSTRING="DWM3001C1"` (matches the feather tags' pattern)
 - `Serial` → `Serial1` remap is local to `src/boards.hpp`; do not make it a
   global `-DSerial=Serial1`, which would collide with TinyUSB's CDC declaration.
+- Aggressive optimization flags enabled (`-Ofast`, loop unrolling, aggressive inlining, frame-pointer omission, Cortex-M4 tuning, and function/loop alignment) for minimal latency in delayed UWB TX timing.

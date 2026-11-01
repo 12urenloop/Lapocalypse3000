@@ -280,25 +280,25 @@ public:
             dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         }
 
-        // if(success){
-        //     failedTXs = 0;
-        // }else{
-        //     failedTXs += 1;
-        //     if(failedTXs > 5 ){
-        //         Serial.print("FTX ");
-        //         Serial.print(failedTXs);
-        //         if(ts_sync_base < 10000 * MS_TO_DWT_TIME){
-        //             Serial.print(" oldbase ");
-        //             Serial.print(ts_sync_base / MS_TO_DWT_TIME);
-        //             ts_sync_base = 10000 * MS_TO_DWT_TIME;
-        //         }
-        //         Serial.print(" base ");
-        //         Serial.print(ts_sync_base / MS_TO_DWT_TIME);
-        //         Serial.print(" - ");
-        //         Serial.println(primes[ANCHOR_ID]);
-        //         ts_sync_base -= primes[ANCHOR_ID] * MS_TO_DWT_TIME;
-        //     }
-        // }
+        if(success){
+            failedTXs = 0;
+        }else{
+            failedTXs += 1;
+            if(failedTXs > 5 ){
+                Serial.print("FTX ");
+                Serial.print(failedTXs);
+                if(ts_sync_base < 5000 * MS_TO_DWT_TIME){
+                    Serial.print(" oldbase ");
+                    Serial.print(ts_sync_base / MS_TO_DWT_TIME);
+                    ts_sync_base = 10000 * MS_TO_DWT_TIME;
+                }
+                Serial.print(" base ");
+                Serial.print(ts_sync_base / MS_TO_DWT_TIME);
+                Serial.print(" - ");
+                Serial.println(primes[ANCHOR_ID]);
+                ts_sync_base -= primes[ANCHOR_ID] * MS_TO_DWT_TIME;
+            }
+        }
     }
 };
 
@@ -309,15 +309,17 @@ double filterDistance(TagState* tagstate){
     size_t maxi = 0;
 
     size_t size = min((uint8_t)DISTBUFSIZE, tagstate->size);
-    // Serial.print("buffer size: ");
+    // Serial.print("s= ");
     // Serial.print(size);
     // Serial.print(" = ");
     for(size_t i = 0; i < size; i++){
+        // Serial.print(" "); Serial.print(tagstate->distances[i]);
         if(tagstate->distances[i] > max){
             max = tagstate->distances[i];
             maxi = i;
         } 
     }
+    // Serial.println();
 
     double min = tagstate->distances[0];
     size_t mini = 0;
@@ -335,6 +337,9 @@ double filterDistance(TagState* tagstate){
         if(i == mini || i == maxi) continue;
         sum += tagstate->distances[i];
     }
+
+    // Serial.print("sum: ");
+    // Serial.println(sum / (size - 2));
 
     return sum / (size - 2);
 }

@@ -115,6 +115,7 @@ void sendData(byte *anchorIds, TagState *distances)
         packet.tagmsgs[packetind].distance = filterDistance(&distances[i]);
         packet.tagmsgs[packetind].timestamp = distances[i].timestamp;
         packet.tagmsgs[packetind].tag_id = i + 1;
+        // Serial.print(i+1); Serial.print(": "); Serial.println(packet.tagmsgs[packetind].distance);
         packetind++;
 
         distances[i].size = 0;

@@ -1,13 +1,21 @@
+module;
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <esp_now.h>
+#include <env/anchorconfig.hpp>
+
+export module anchor;
+
+import serial_commands;
+import sstwr_initiator_uwbsync;
+import espnow_reporter;
+
 #define USEWIFI true
 #define UWB_DEBUG true
 
-#include <Arduino.h>
-#include <connectivity/espnow_reporter.hpp>
 // #include <connectivity/mqtt_reporter.hpp>
 // #include <connectivity/debugserver.hpp>
-#include <types/taginfo.hpp>
-#include <uwb/SSTWR_initiator_uwbsync.hpp>
-#include <env/anchorconfig.hpp>
 
 #define APP_NAME "SS TWR INIT v1.0"
 
@@ -17,10 +25,10 @@ SSTWR_Initiator::Config anchorconfig = {
     };
 
 SSTWR_Initiator UWBInitiator = 
-    SSTWR_Initiator({standard_dwconfig, 0x0 + ANCHOR_ID, true}, anchorconfig, ANCHOR_ID - 1);
+    SSTWR_Initiator(0x0 + ANCHOR_ID, anchorconfig, ANCHOR_ID - 1);
 
 
-void setup()
+export void anchor_setup()
 {
 #if BOARD==DWM3001C
     Serial.setPins(15, 19);
@@ -55,7 +63,7 @@ unsigned long lastreport = 0;
 bool uwbOn = true;
 static String serialBuffer = "";
 
-void loop()
+export void anchor_loop()
 {
 
     if(uwbOn){

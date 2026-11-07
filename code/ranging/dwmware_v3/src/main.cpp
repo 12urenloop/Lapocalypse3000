@@ -11,6 +11,17 @@
 
 #if defined(MODULE_FIRMWARE)
 import firmware;
+#if defined(ANCHORCODE) || defined(ESPNOWTOSERIALCODE)
+void setup()
+{
+    firmware_setup();
+}
+
+void loop()
+{
+    firmware_loop();
+}
+#endif
 #else
 #ifdef TAGCODE
 #include "tag.hpp"
@@ -20,7 +31,4 @@ import firmware;
 #include "anchor.hpp"
 #endif
 
-#ifdef ESPNOWTOSERIALCODE
-#include "espnowtoserialmain.hpp"
-#endif
 #endif

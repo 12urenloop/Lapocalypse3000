@@ -1,8 +1,15 @@
+module;
+
+#include <Arduino.h>
+#include <WiFi.h>
+#include <esp_now.h>
+
+export module gateway;
+
+import espnow_reporter;
+import serial_commands;
+
 #define ANCHOR_ID 0
-
-#include <connectivity/espnow_reporter.hpp>
-#include "serial_commands.hpp"
-
 
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {
@@ -34,7 +41,7 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
     Serial.println();
 }
 
-void setup()
+export void gateway_setup()
 {
     Serial.begin(115200);
 
@@ -46,7 +53,25 @@ void setup()
 }
 static String serial_buffer;
 
-void loop()
+void process_serial()
 {
-    serial_commands::process(Serial, serial_buffer, INFOSTRING);
+    while (Serial.available())
+    {
+        static String buffer;
+        buffer += static_cast<char>(Serial.read());
+        if (buffer.endsWith("\n"))
+        {
+            if (serial_commands::is_get_info_command(buffer.c_str()))
+            {
+                Serial.print("INFO=");
+                Serial.println(INFOSTRING);
+            }
+            buffer.remove(0);
+        }
+    }
+}
+
+export void gateway_loop()
+{
+    process_serial();
 }

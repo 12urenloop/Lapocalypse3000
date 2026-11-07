@@ -8,10 +8,29 @@ Import("env")
 project_dir = env.subst("$PROJECT_DIR")
 build_dir = env.subst("$BUILD_DIR")
 module_source = os.path.join(project_dir, "src", "a_serial_commands.cpp")
+initiator_source = os.path.join(project_dir, "src", "a_sstwr_initiator_uwbsync.cpp")
+reporter_source = os.path.join(project_dir, "src", "a_espnow_reporter.cpp")
+anchor_source = os.path.join(project_dir, "src", "a_anchor.cpp")
+gateway_source = os.path.join(project_dir, "src", "a_gateway.cpp")
 firmware_source = os.path.join(project_dir, "src", "a_firmware.cpp")
 module_cache = os.path.join(project_dir, "gcm.cache")
 serial_object = os.path.join(build_dir, "serial_commands_module.o")
+initiator_object = os.path.join(build_dir, "sstwr_initiator_uwbsync_module.o")
+reporter_object = os.path.join(build_dir, "espnow_reporter_module.o")
+anchor_object = os.path.join(build_dir, "anchor_module.o")
+gateway_object = os.path.join(build_dir, "gateway_module.o")
 firmware_object = os.path.join(build_dir, "firmware_module.o")
+
+if not os.path.isdir(module_cache):
+    for output in (
+        serial_object,
+        initiator_object,
+        reporter_object,
+        anchor_object,
+        firmware_object,
+    ):
+        if os.path.exists(output):
+            os.remove(output)
 
 
 def flatten(values):
@@ -96,12 +115,40 @@ def compile_firmware_module(target, source, env):
     compile_module(target, [firmware_source], env)
 
 
+def compile_initiator_module(target, source, env):
+    compile_module(target, [initiator_source], env)
+
+
+def compile_reporter_module(target, source, env):
+    compile_module(target, [reporter_source], env)
+
+
+def compile_anchor_module(target, source, env):
+    compile_module(target, [anchor_source], env)
+
+
+def compile_gateway_module(target, source, env):
+    compile_module(target, [gateway_source], env)
+
+
 serial_node = env.Command(
     serial_object,
     [],
     compile_serial_module,
 )
 module_nodes = [serial_node]
+is_anchor_environment = env.subst("$PIOENV") == "wemosanchor01"
+is_gateway_environment = env.subst("$PIOENV") == "serialrelay"
+if is_anchor_environment:
+    initiator_node = env.Command(initiator_object, [serial_node], compile_initiator_module)
+    reporter_node = env.Command(reporter_object, [initiator_node], compile_reporter_module)
+    anchor_node = env.Command(anchor_object, [serial_node, initiator_node, reporter_node], compile_anchor_module)
+    module_nodes.extend([initiator_node, reporter_node, anchor_node])
+if is_gateway_environment:
+    initiator_node = env.Command(initiator_object, [serial_node], compile_initiator_module)
+    reporter_node = env.Command(reporter_object, [initiator_node], compile_reporter_module)
+    gateway_node = env.Command(gateway_object, [serial_node, reporter_node], compile_gateway_module)
+    module_nodes.extend([initiator_node, reporter_node, gateway_node])
 
 firmware_node = env.Command(
     firmware_object,

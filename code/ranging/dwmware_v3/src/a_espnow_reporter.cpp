@@ -1,10 +1,13 @@
-#pragma once
+module;
+
 #include <WiFi.h>
 #include <esp_now.h>
 #include <types/taginfo.hpp>
 #include <env/wificonfig.hpp>
-#include <uwb/UWB_common.hpp>
-#include <uwb/SSTWR_initiator_uwbsync.hpp>
+
+export module espnow_reporter;
+
+import sstwr_initiator_uwbsync;
 
 #ifndef USEWIFI
 #define USEWIFI true
@@ -29,7 +32,7 @@ uint8_t nextHop[] = GATEWAYMAC;
 #endif
 constexpr uint8_t CHANNEL = 7;
 
-struct __attribute__((packed)) PacketHeader
+export struct __attribute__((packed)) PacketHeader
 {
     uint8_t source;      // Original node ID
     uint8_t destination; // Usually receiver ID
@@ -37,20 +40,20 @@ struct __attribute__((packed)) PacketHeader
                          // uint8_t  hops;        // Incremented by every relay
 };
 
-struct __attribute__((packed)) TagMsg
+export struct __attribute__((packed)) TagMsg
 {
     uint64_t timestamp;
     double distance;
     uint8_t tag_id;
 };
 
-struct __attribute__((packed)) Packet
+export struct __attribute__((packed)) Packet
 {
     PacketHeader header;
-    TagMsg tagmsgs[N_TAGS];
+    TagMsg tagmsgs[tag_count];
 };
 
-void anchorOnReceive(const esp_now_recv_info_t *info, const uint8_t *data, int len)
+export void anchorOnReceive(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {
     // Packet recv_packet;
     // memcpy(&recv_packet, data, sizeof(recv_packet));
@@ -71,7 +74,7 @@ void anchorOnReceive(const esp_now_recv_info_t *info, const uint8_t *data, int l
                  len);
 }
 
-void setup_espnow()
+export void setup_espnow()
 {
     WiFi.mode(WIFI_STA);
     WiFi.setChannel(CHANNEL);
@@ -97,14 +100,14 @@ void setup_espnow()
 
 Packet packet;
 
-void sendData(byte *anchorIds, TagState *distances)
+export void sendData(byte *anchorIds, TagState *distances)
 {
 
     packet.header.source = ANCHOR_ID;
     packet.header.destination = 0xFF;
 
     int packetind = 0;
-    for (int i = 0; i < N_TAGS; i++)
+    for (int i = 0; i < tag_count; i++)
     {
         if (distances[i].size <= 0)
             continue;

@@ -3,7 +3,6 @@
 #include <types/taginfo.hpp>
 #include <env/wificonfig.hpp>
 #include <uwb/UWB_common.hpp>
-#include <uwb/SSTWR_initiator_uwbsync.hpp>
 
 
 #ifndef USEWIFI

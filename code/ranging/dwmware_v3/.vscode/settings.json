@@ -1,0 +1,11 @@
+{
+    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+    "platformio-ide.autoRebuildAutocompleteIndex": false,
+    "C_Cpp.default.cppStandard": "c++23",
+    "C_Cpp.default.cStandard": "gnu17",
+    "C_Cpp.default.compilerArgs": [
+        "-std=gnu++23",
+        "-fmodules-ts"
+    ]
+}

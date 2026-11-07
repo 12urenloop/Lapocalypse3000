@@ -1,23 +1,27 @@
-#pragma once
+module;
+
 #include <uwb/UWB_common.hpp>
 #include <env/anchorconfig.hpp>
 #include <env/tagconfig.hpp>
+
+export module sstwr_initiator_uwbsync;
 
 #define RESP_RX_TIMEOUT_UUS 400
 
 #ifndef UWB_DEBUG
 #define UWB_DEBUG true
 #endif
-
+P
 #ifndef ANCHOR_ID
 #define ANCHOR_ID 0x0
 #endif
 
 #define DISTBUFSIZE 5
 
+export inline constexpr size_t tag_count = N_TAGS;
 
 //test
-struct TagState
+export struct TagState
 {
     double distances[DISTBUFSIZE] = {-10.0, -10.0, -10.0, -10.0, -10.0};
     uint64_t timestamp = 0;
@@ -40,7 +44,7 @@ uint16_t primes[20] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29,
                        31, 37, 41, 43, 47, 53, 59, 61, 67, 71};
 
 uint8_t expected_sender = 0x0;
-class SSTWR_Initiator : UWB_Common
+export class SSTWR_Initiator : UWB_Common
 {
 public:
     uint64_t nextSlot_us;
@@ -64,9 +68,9 @@ public:
     uint32_t lastloop = millis();
     uint32_t failedTXs = 0;
 
-    SSTWR_Initiator(UWB_Common::Config cconfig, Config config, uint32_t mySlot) : anchorConfig(config)
+    SSTWR_Initiator(uint8_t address, Config config, uint32_t mySlot) : anchorConfig(config)
     {
-        UWB_Common::config = cconfig;
+        UWB_Common::config = {standard_dwconfig, address, true};
         mySlotOffsetMS = mySlot * config.slotOffsetMS;
         target_tag_ix = 0;
         workingReceive = false;
@@ -77,8 +81,8 @@ public:
                 distances[i].distances[j] = -10.0;
         }
 
-        txmsg.sender = cconfig.address; // set sender
-        tx_marker_msg[0] = cconfig.address;
+        txmsg.sender = address; // set sender
+        tx_marker_msg[0] = address;
     }
 
     void setup()
@@ -302,7 +306,7 @@ public:
     }
 };
 
-double filterDistance(TagState* tagstate){
+export double filterDistance(TagState* tagstate){
     if(tagstate->size == 0)
         return -10.0;
     double max = tagstate->distances[0];

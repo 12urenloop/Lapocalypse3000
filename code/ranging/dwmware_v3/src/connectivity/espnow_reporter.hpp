@@ -35,8 +35,6 @@ struct __attribute__((packed)) PacketHeader
     uint8_t destination; // Usually receiver ID
                          // uint8_t  sequence;    // Or uint16_t if needed
                          // uint8_t  hops;        // Incremented by every relay
-
-    // uint8_t  data[12];    // Your actual measurement
 };
 
 struct __attribute__((packed)) TagMsg
@@ -111,11 +109,9 @@ void sendData(byte *anchorIds, TagState *distances)
         if (distances[i].size <= 0)
             continue;
         
-        // packet.tagmsgs[packetind].distance = distances[i].distances[distances[i].size - 1];
         packet.tagmsgs[packetind].distance = filterDistance(&distances[i]);
         packet.tagmsgs[packetind].timestamp = distances[i].timestamp;
         packet.tagmsgs[packetind].tag_id = i + 1;
-        // Serial.print(i+1); Serial.print(": "); Serial.println(packet.tagmsgs[packetind].distance);
         packetind++;
 
         distances[i].size = 0;

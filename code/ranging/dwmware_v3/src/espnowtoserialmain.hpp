@@ -1,6 +1,7 @@
 #define ANCHOR_ID 0
 
 #include <connectivity/espnow_reporter.hpp>
+#include "serial_commands.hpp"
 
 
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len)
@@ -43,29 +44,9 @@ void setup()
 
     Serial.println("ESP-NOW receiver ready");
 }
-static String serialBuffer = "";
+static String serial_buffer;
 
 void loop()
 {
-    while (Serial.available()) {
-        char c = (char)Serial.read();
-        serialBuffer += c;
-        if (serialBuffer.length() > 64) serialBuffer = serialBuffer.substring(serialBuffer.length() - 64);
-        // Serial.println(serialBuffer);
-        
-        
-        if(c != '\n') continue;
-        bool commanded = true;
-        if(serialBuffer.indexOf("AT+GETINFO") != -1){
-            Serial.println("");
-            Serial.print("INFO=");
-            Serial.println(INFOSTRING);
-        }else{
-            commanded = false;
-        }
-        
-        if(commanded){
-            // serialBuffer.clear();
-        }
-    }
+    serial_commands::process(Serial, serial_buffer, INFOSTRING);
 }

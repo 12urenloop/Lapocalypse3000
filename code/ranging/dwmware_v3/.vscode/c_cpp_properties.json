@@ -752,7 +752,8 @@
             "cStandard": "gnu17",
             "cppStandard": "gnu++23",
             "intelliSenseMode": "linux-gcc-x64",
-            "compilerPath": "/home/robin/.platformio/packages/toolchain-xtensa-esp-elf/bin/xtensa-esp32-elf-gcc",
+            "enableConfigurationSquiggles": true,
+            "compilerPath": "/home/robin/.platformio/packages/toolchain-xtensa-esp-elf/bin/xtensa-esp32-elf-g++",
             "compilerArgs": [
                 "-mlongcalls",
                 "-mdisable-hardware-atomics",

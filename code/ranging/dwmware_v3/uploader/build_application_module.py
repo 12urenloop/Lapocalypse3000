@@ -5,6 +5,8 @@ from glob import glob
 
 Import("env")
 
+env.AppendUnique(CXXFLAGS=["-std=gnu++23", "-fmodules-ts"])
+
 project_dir = env.subst("$PROJECT_DIR")
 build_dir = env.subst("$BUILD_DIR")
 module_source = os.path.join(project_dir, "src", "a_serial_commands.cpp")
@@ -12,7 +14,11 @@ initiator_source = os.path.join(project_dir, "src", "a_sstwr_initiator_uwbsync.c
 reporter_source = os.path.join(project_dir, "src", "a_espnow_reporter.cpp")
 anchor_source = os.path.join(project_dir, "src", "a_anchor.cpp")
 gateway_source = os.path.join(project_dir, "src", "a_gateway.cpp")
-firmware_source = os.path.join(project_dir, "src", "a_firmware.cpp")
+firmware_sources = {
+    "tag": os.path.join(project_dir, "src", "a_firmware_tag.cpp"),
+    "anchor": os.path.join(project_dir, "src", "a_firmware_anchor.cpp"),
+    "gateway": os.path.join(project_dir, "src", "a_firmware_gateway.cpp"),
+}
 module_cache = os.path.join(project_dir, "gcm.cache")
 serial_object = os.path.join(build_dir, "serial_commands_module.o")
 initiator_object = os.path.join(build_dir, "sstwr_initiator_uwbsync_module.o")
@@ -21,16 +27,18 @@ anchor_object = os.path.join(build_dir, "anchor_module.o")
 gateway_object = os.path.join(build_dir, "gateway_module.o")
 firmware_object = os.path.join(build_dir, "firmware_module.o")
 
-if not os.path.isdir(module_cache):
-    for output in (
-        serial_object,
-        initiator_object,
-        reporter_object,
-        anchor_object,
-        firmware_object,
-    ):
-        if os.path.exists(output):
-            os.remove(output)
+if os.path.isdir(module_cache):
+    shutil.rmtree(module_cache)
+for output in (
+    serial_object,
+    initiator_object,
+    reporter_object,
+    anchor_object,
+    gateway_object,
+    firmware_object,
+):
+    if os.path.exists(output):
+        os.remove(output)
 
 
 def flatten(values):
@@ -112,7 +120,14 @@ def compile_serial_module(target, source, env):
 
 
 def compile_firmware_module(target, source, env):
-    compile_module(target, [firmware_source], env)
+    environment = env.subst("$PIOENV")
+    if environment == "serialrelay":
+        role = "gateway"
+    elif environment in {"wemosanchor01"}:
+        role = "anchor"
+    else:
+        role = "tag"
+    compile_module(target, [firmware_sources[role]], env)
 
 
 def compile_initiator_module(target, source, env):
@@ -158,7 +173,10 @@ firmware_node = env.Command(
 module_nodes.append(firmware_node)
 
 env.AppendUnique(LIBS=module_nodes)
+pio_environment = env.subst("$PIOENV")
+tag_environments = {"wemostag01", "wemostag02", "nrftag", "nrftag1", "nrftag2dwm3001c", "nrftag3001c", "nrftag2"}
+entry_source = "main_tag.cpp" if pio_environment in tag_environments else "main.cpp"
 env.Depends(
-    env.File(os.path.join(build_dir, "src", "main.cpp.o")),
+    env.File(os.path.join(build_dir, "src", entry_source + ".o")),
     firmware_node,
 )

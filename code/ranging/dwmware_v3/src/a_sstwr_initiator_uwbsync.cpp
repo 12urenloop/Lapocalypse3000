@@ -11,7 +11,7 @@ export module sstwr_initiator_uwbsync;
 #ifndef UWB_DEBUG
 #define UWB_DEBUG true
 #endif
-P
+
 #ifndef ANCHOR_ID
 #define ANCHOR_ID 0x0
 #endif

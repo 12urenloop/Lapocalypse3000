@@ -1,11 +1,26 @@
 {
-    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "clangd.enabled": true,
+    "clangd.path": "/usr/bin/clangd",
+    "clangd.arguments": [
+        "--background-index",
+        "--header-insertion=never",
+        "--query-driver=/home/robin/.platformio/packages/toolchain-xtensa-esp-elf/bin/xtensa-esp-elf-g++"
+    ],
     "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
     "platformio-ide.autoRebuildAutocompleteIndex": false,
-    "C_Cpp.default.cppStandard": "c++23",
+    "C_Cpp.default.enableConfigurationSquiggles": true,
+    "C_Cpp.default.errorSquiggles": "enabled",
+    "C_Cpp.default.enhancedColorization": "enabled",
+    "C_Cpp.default.cppStandard": "gnu++23",
     "C_Cpp.default.cStandard": "gnu17",
     "C_Cpp.default.compilerArgs": [
         "-std=gnu++23",
         "-fmodules-ts"
-    ]
+    ],
+    "files.associations": {
+        "*.cpp": "cpp",
+        "*.cc": "cpp",
+        "*.cxx": "cpp"
+    }
 }

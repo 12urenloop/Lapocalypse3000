@@ -2,6 +2,7 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 from glob import glob
 
 Import("env")
@@ -49,7 +50,36 @@ def module_command(source, target, command_env):
     for library_root in flatten(command_env.get("LIBSOURCE_DIRS", [])):
         include_paths.extend(glob(os.path.join(str(library_root), "*")))
         include_paths.extend(glob(os.path.join(str(library_root), "*", "src")))
-    include_flags = ["-I" + path for path in dict.fromkeys(include_paths)]
+
+    # Board/framework variant headers (e.g. variant.h) may not be in CPPPATH yet
+    # when this pre: script runs, so add them explicitly.
+    try:
+        board = command_env.BoardConfig()
+        variant = board.get("build.variant")
+        variants_dir = board.get("build.variants_dir", "variants")
+        if variant:
+            include_paths.extend(
+                [
+                    os.path.join(project_dir, variants_dir, variant),
+                    os.path.join(project_dir, "variants", variant),
+                ]
+            )
+            framework = board.get("build.framework", "arduino")
+            platform = command_env.PioPlatform()
+            for pkg in (f"framework-{framework}{core}" for core in ("adafruitnrf52", "")):
+                pkg_dir = platform.get_package_dir(pkg)
+                if pkg_dir:
+                    include_paths.extend(
+                        [
+                            os.path.join(pkg_dir, "variants", variant),
+                            os.path.join(pkg_dir, variants_dir, variant),
+                            os.path.join(pkg_dir, "cores", board.get("build.core", "")),
+                        ]
+                    )
+    except Exception:
+        pass
+
+    include_flags = ["-I" + path for path in dict.fromkeys(include_paths) if path]
 
     module_flags = []
     skip_param_value = False
@@ -83,15 +113,24 @@ def module_command(source, target, command_env):
 
 
 def compile_module(target, source, command_env):
-    command = module_command(str(source[0]), str(target[0]), command_env)
-    if command_env.Execute(
-        " ".join(shlex.quote(str(arg)) for arg in command)
-    ) != 0:
-        raise RuntimeError("Failed to build C++ module: {}".format(source[0]))
+    src = str(source[0])
+    dst = str(target[0])
+    command = module_command(src, dst, command_env)
+    print("Compiling C++ module: {} -> {}".format(os.path.relpath(src, project_dir), os.path.relpath(dst, project_dir)))
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if result.returncode != 0:
+        if result.stdout:
+            print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+        raise RuntimeError("Failed to build C++ module: {}".format(src))
 
 
 def resolve_path(path):
     return path if os.path.isabs(path) else os.path.join(project_dir, path)
+
+
+IMPORT_RE = re.compile(r"(?:export\s+)?import\s+([A-Za-z0-9_.:]+)\s*;")
+EXPORT_RE = re.compile(r"export\s+module\s+([A-Za-z0-9_.:]+)\s*;")
+INCLUDE_RE = re.compile(r'^\s*#\s*include\s*"([^"]+)"')
 
 
 def scan_module(path):
@@ -100,16 +139,50 @@ def scan_module(path):
     with open(path, "r", encoding="utf-8") as handle:
         for line in handle:
             stripped = line.strip()
-            match = re.match(r"export\s+module\s+([A-Za-z0-9_.:]+)\s*;", stripped)
+            match = EXPORT_RE.match(stripped)
             if match:
                 export_name = match.group(1)
                 continue
-            match = re.match(r"(?:export\s+)?import\s+([A-Za-z0-9_.:]+)\s*;", stripped)
+            match = IMPORT_RE.match(stripped)
             if match:
                 imports.add(match.group(1))
     if not export_name:
         export_name = os.path.splitext(os.path.basename(path))[0]
     return export_name, imports
+
+
+def collect_imports(path, seen=None):
+    # Collect module imports from a source/header and its project-local quoted includes.
+    if seen is None:
+        seen = set()
+    path = os.path.normpath(path)
+    if path in seen or not os.path.isfile(path):
+        return set()
+    seen.add(path)
+    imports = set()
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return imports
+    for line in lines:
+        stripped = line.strip()
+        match = IMPORT_RE.match(stripped)
+        if match:
+            imports.add(match.group(1))
+        inc = INCLUDE_RE.match(line)
+        if inc:
+            name = inc.group(1)
+            candidates = [
+                os.path.normpath(os.path.join(os.path.dirname(path), name)),
+                os.path.normpath(os.path.join(project_dir, "src", name)),
+                os.path.normpath(os.path.join(project_dir, "include", name)),
+            ]
+            for candidate in candidates:
+                if os.path.isfile(candidate):
+                    imports.update(collect_imports(candidate, seen))
+                    break
+    return imports
 
 
 def parse_units(raw):
@@ -159,7 +232,7 @@ firmware_source = get_option("custom_module_firmware", "").strip()
 if not firmware_source:
     Return()
 
-entries = parse_units(get_option("custom_module_units", ""))
+raw_units = get_option("custom_module_units", "").strip()
 entry_source = get_option("custom_module_entry", "").strip()
 
 # Reset module BMI cache and previous module objects for a clean, ordered build.
@@ -168,18 +241,39 @@ if os.path.isdir(module_cache):
 
 unit_map = {}
 explicit = {}
-for name, source, deps, has_deps in entries:
-    src = resolve_path(source)
-    if has_deps:
-        unit_map[name] = {"source": src, "imports": set()}
-        explicit[name] = deps
-    else:
-        mod_name, imports = scan_module(src)
-        unit_map[mod_name] = {"source": src, "imports": imports}
+if raw_units:
+    entries = parse_units(raw_units)
+    for name, source, deps, has_deps in entries:
+        src = resolve_path(source)
+        if has_deps:
+            unit_map[name] = {"source": src, "imports": set()}
+            explicit[name] = deps
+        else:
+            mod_name, imports = scan_module(src)
+            unit_map[mod_name] = {"source": src, "imports": imports}
+    for name, deps in explicit.items():
+        unit_map[name]["imports"] = set(deps)
+else:
+    # Auto-discover module units under src/*.module.cpp and include those required by firmware.
+    discovered = {}
+    for path in sorted(glob(os.path.join(project_dir, "src", "**", "*.module.cpp"), recursive=True)):
+        mod_name, imports = scan_module(path)
+        discovered[mod_name] = {"source": path, "imports": imports}
 
-# Apply explicit deps if provided (legacy format), else use scanned deps filtered to known units.
-for name, deps in explicit.items():
-    unit_map[name]["imports"] = set(deps)
+    firmware_path = resolve_path(firmware_source)
+    firmware_imports = collect_imports(firmware_path)
+    needed = set()
+    stack = [imp for imp in firmware_imports if imp in discovered]
+    while stack:
+        name = stack.pop()
+        if name in needed:
+            continue
+        needed.add(name)
+        imports = discovered[name]["imports"] | collect_imports(discovered[name]["source"])
+        for imp in imports:
+            if imp in discovered and imp not in needed:
+                stack.append(imp)
+    unit_map = {name: discovered[name] for name in needed}
 
 order, deps = topo_sort(unit_map)
 

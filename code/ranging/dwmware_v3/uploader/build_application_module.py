@@ -1,4 +1,5 @@
 import os
+import re
 import shlex
 import shutil
 from glob import glob
@@ -93,42 +94,106 @@ def resolve_path(path):
     return path if os.path.isabs(path) else os.path.join(project_dir, path)
 
 
+def scan_module(path):
+    export_name = None
+    imports = set()
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            match = re.match(r"export\s+module\s+([A-Za-z0-9_.:]+)\s*;", stripped)
+            if match:
+                export_name = match.group(1)
+                continue
+            match = re.match(r"(?:export\s+)?import\s+([A-Za-z0-9_.:]+)\s*;", stripped)
+            if match:
+                imports.add(match.group(1))
+    if not export_name:
+        export_name = os.path.splitext(os.path.basename(path))[0]
+    return export_name, imports
+
+
 def parse_units(raw):
-    units = []
-    for item in raw.replace("\n", ";").split(";"):
+    # Legacy format: name:src[:dep1,dep2]; auto format: src/path.cpp (deps scanned).
+    entries = []
+    for item in re.split(r"[;\n,]+", raw):
         item = item.strip()
         if not item:
             continue
         parts = [part.strip() for part in item.split(":")]
-        name = parts[0]
-        source = parts[1] if len(parts) > 1 else ""
-        deps = [dep.strip() for dep in parts[2].split(",")] if len(parts) > 2 and parts[2].strip() else []
-        units.append((name, source, deps))
-    return units
+        if len(parts) >= 2 and ("/" in parts[1] or parts[1].endswith(".cpp") or parts[1].endswith(".cxx")):
+            name = parts[0]
+            source = parts[1]
+            deps = [d.strip() for d in parts[2].split(",")] if len(parts) > 2 and parts[2].strip() else []
+            entries.append((name, source, deps, True))
+        else:
+            entries.append((None, item, [], False))
+    return entries
+
+
+def topo_sort(unit_map):
+    # unit_map: name -> {"source": abs, "imports": set}
+    deps = {name: [imp for imp in info["imports"] if imp in unit_map] for name, info in unit_map.items()}
+    indegree = {name: 0 for name in unit_map}
+    reverse = {name: [] for name in unit_map}
+    for name, reqs in deps.items():
+        for req in reqs:
+            indegree[name] += 1
+            reverse[req].append(name)
+    ready = sorted([name for name, deg in indegree.items() if deg == 0])
+    order = []
+    while ready:
+        name = ready.pop(0)
+        order.append(name)
+        for nxt in sorted(reverse[name]):
+            indegree[nxt] -= 1
+            if indegree[nxt] == 0:
+                ready.append(nxt)
+                ready.sort()
+    if len(order) != len(unit_map):
+        remaining = [name for name in unit_map if name not in order]
+        raise RuntimeError("Cyclic or unresolved C++ module dependencies: {}".format(", ".join(sorted(remaining))))
+    return order, deps
 
 
 firmware_source = get_option("custom_module_firmware", "").strip()
 if not firmware_source:
     Return()
 
-unit_specs = parse_units(get_option("custom_module_units", ""))
+entries = parse_units(get_option("custom_module_units", ""))
 entry_source = get_option("custom_module_entry", "").strip()
 
 # Reset module BMI cache and previous module objects for a clean, ordered build.
 if os.path.isdir(module_cache):
     shutil.rmtree(module_cache)
 
-objects = [os.path.join(build_dir, "{}_module.o".format(name)) for name, _, _ in unit_specs]
+unit_map = {}
+explicit = {}
+for name, source, deps, has_deps in entries:
+    src = resolve_path(source)
+    if has_deps:
+        unit_map[name] = {"source": src, "imports": set()}
+        explicit[name] = deps
+    else:
+        mod_name, imports = scan_module(src)
+        unit_map[mod_name] = {"source": src, "imports": imports}
+
+# Apply explicit deps if provided (legacy format), else use scanned deps filtered to known units.
+for name, deps in explicit.items():
+    unit_map[name]["imports"] = set(deps)
+
+order, deps = topo_sort(unit_map)
+
+objects = [os.path.join(build_dir, "{}_module.o".format(name)) for name in order]
 firmware_object = os.path.join(build_dir, "firmware_module.o")
 for output in [*objects, firmware_object]:
     if os.path.exists(output):
         os.remove(output)
 
 nodes = {}
-for name, source, deps in unit_specs:
-    dep_nodes = [nodes[dep] for dep in deps]
+for name in order:
+    dep_nodes = [nodes[dep] for dep in deps[name] if dep in nodes]
     target = os.path.join(build_dir, "{}_module.o".format(name))
-    src = resolve_path(source)
+    src = unit_map[name]["source"]
     nodes[name] = env.Command(
         target,
         dep_nodes,

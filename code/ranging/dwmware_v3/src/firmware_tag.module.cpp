@@ -2,7 +2,6 @@ module;
 
 #include <Arduino.h>
 // #include "boards.hpp"
-#include "serial_commands.hpp"
 #include <uwb/SSTWR_responder_uwbsync.hpp>
 // #include <uwb/SSTWR_responder.hpp>
 
@@ -10,7 +9,9 @@ module;
 // #include <connectivity/debugserver.hpp>
 
 #define APP_NAME "SS TWR RESP v1.0"
-export module firmware;
+export module tagfirmware;
+
+import serial_commands;
 
 SSTWR_Responder uwb_responder = SSTWR_Responder({standard_dwconfig, 0xA0 + TAG_ID});
 

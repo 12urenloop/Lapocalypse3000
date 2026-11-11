@@ -6,3 +6,7 @@
 src/env
 node_modules
 **/*.gcm
+.clangd-db/
+.cache/clangd/
+compile_commands.json
+uploader/__pycache__

@@ -1,6 +1,6 @@
 module;
 
-export module firmware;
+export module gatewayfirmware;
 
 export import gateway;
 

@@ -3,6 +3,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from glob import glob
 
 Import("env")
@@ -310,3 +311,32 @@ if entry_source:
         env.File(os.path.join(build_dir, "src", entry_source + ".o")),
         firmware_node,
     )
+
+
+def update_clangd_compile_commands():
+    # Best-effort: keep a clangd-oriented, sanitized compilation database in sync
+    # for the active PlatformIO env (including the resolved module set).
+    compiledb = os.path.join(project_dir, "compile_commands.json")
+    if not os.path.isfile(compiledb):
+        return
+    generator = os.path.join(project_dir, "uploader", "gen_clangd_db.py")
+    if not os.path.isfile(generator):
+        return
+    pioenv = env.subst("$PIOENV")
+    try:
+        subprocess.run(
+            [sys.executable, generator, "--env", pioenv, "--compiledb", compiledb],
+            cwd=project_dir,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except Exception:
+        pass
+
+
+try:
+    update_clangd_compile_commands()
+except Exception:
+    pass
+

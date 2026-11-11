@@ -4,7 +4,7 @@ module;
 #include <esp_now.h>
 #include <env/anchorconfig.hpp>
 
-export module firmware;
+export module anchorfirmware;
 
 import serial_commands;
 import sstwr_initiator_uwbsync;

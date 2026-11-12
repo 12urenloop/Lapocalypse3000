@@ -1,5 +1,6 @@
 #pragma once
 #include <uwb/UWB_common.hpp>
+#include "env/tagconfig.hpp"
 // #include <ESPNowMeshClock.h>
 
 #ifndef TAG_ID
@@ -17,6 +18,21 @@
 
 /* The typical trimming range (with 4.7pF external caps is ~77ppm (-65ppm to +12ppm) over all steps, see DW3000 Datasheet */
 #define AVG_TRIM_PER_PPM ((FS_XTALT_MAX_VAL + 1) / 77.0f)
+#include <nrf.h>
+#include <Arduino.h>
+
+uint64_t getDeviceAddress() {
+    uint64_t address = NRF_FICR->DEVICEADDR[0];
+
+    address |=
+        (uint64_t)(NRF_FICR->DEVICEADDR[1] & 0xFFFF) << 32;
+
+    Serial.print("BT address: ");
+    Serial.print((uint32_t)(address >> 32), HEX);
+    Serial.println((uint32_t)address, HEX);
+
+    return address;
+}
 
 /* Frames used in the ranging process. See NOTE 3 below. */
 // layout: sender, receiver, message code, seq number 2 bytes.
@@ -30,6 +46,16 @@
 #ifndef XTALTRIM
 #define XTALTRIM 26
 #endif
+
+constexpr ct::Entry<uint64_t, uint8_t> entries[] = {
+    {0xEDA70CC27E5, 0xB1},
+    {42, 0xB2},
+    {100, 0xA1},
+    {256, 0xA2},
+    {999, 0xA3}
+};
+
+inline constexpr auto idmap = ct::make_static_map(entries);
 
 TagPacket txmsg;
 AnchorPacket* rxmsg;
@@ -62,13 +88,17 @@ public:
         dwt_write32bitreg(GPIO_MODE_ID, (0b001 << 18) | (0b001 << 15) | (0b001 << 12) | (0b001 << 9) | (0b001 << 6) | (0b001 << 3) | (0b001 << 0));
         
         /* Read the initial crystal trimming value. This needs to be done after dwt_initialise(), which sets up initial trimming code.*/
-        dwt_setxtaltrim(XTALTRIM);
+        // dwt_setxtaltrim(XTALTRIM);
         // uCurrentTrim_val = dwt_getxtaltrim();
         // trim_calc_val = (TARGET_XTAL_OFFSET_VALUE_PPM_MAX + TARGET_XTAL_OFFSET_VALUE_PPM_MIN) / 2;
         // offset_ppm_calc_val = CLOCK_OFFSET_PPM_TO_RATIO * 1e6;
 
         txmsg.msgtype = TagRangeResp;
-        txmsg.sender = config.address;
+
+
+        txmsg.sender = *idmap.find(getDeviceAddress());
+        Serial.print("set address to ");
+        Serial.println(txmsg.sender);
 
     }
 
@@ -111,7 +141,7 @@ public:
 
                 /* Check that the frame is a poll sent by "SS TWR initiator" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                if (rxmsg->receiver == config.address && rxmsg->msgtype == AnchorRange) // if destination is our address
+                if (rxmsg->receiver == 0/*config.address*/ && rxmsg->msgtype == AnchorRange) // if destination is our address
                 {
                     // UART_puts("CHECK\r\n");
 

@@ -140,7 +140,6 @@ class UWB_Common{
     
     struct Config{
         dwt_config_t dwconfig;
-        byte address;
         bool enable_serialreport = false;
     };
 
@@ -148,7 +147,7 @@ class UWB_Common{
     uint32_t last_systime = 0;
     // uint32_t last_systime = UINT32_MAX;
     // uint64_t ts_sync_base = 0; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
-    uint64_t ts_sync_base = 10000 * MS_TO_DWT_TIME; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
+    uint64_t ts_sync_base = (uint64_t)10000 * MS_TO_DWT_TIME; // mesh time sync offset to add to SYS_TS (lower 32 bits), supports around 8 years of runtime
     
 
     void setup(){

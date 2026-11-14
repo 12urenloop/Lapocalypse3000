@@ -303,8 +303,24 @@ def sanitize_command(command, module_dir_abs=None):
     except ValueError:
         argv = command.split()
     argv = sanitize_argv(argv)
-    if module_dir_abs and any(a.endswith((".cpp", ".cc", ".cxx", ".module.cpp")) or os.path.basename(a).endswith("++") for a in argv[:2]):
-        argv = add_clangd_module_flags(argv, module_dir_abs)
+    # Do not inject or preserve C++ module flags in arbitrary compile commands:
+    # adding -fprebuilt-module-path/-fmodule-file to non-module TUs can make
+    # clangd load or index with module state/PCMs in contexts they were not built
+    # for and crash. Module flags are added explicitly for the selected
+    # firmware/module/entry sources.
+    cleaned = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "-fprebuilt-module-path":
+            i += 2
+            continue
+        if a.startswith("-fprebuilt-module-path=") or a.startswith("-fmodule-file="):
+            i += 1
+            continue
+        cleaned.append(a)
+        i += 1
+    argv = cleaned
     return " ".join(shlex.quote(a) for a in argv)
 
 
@@ -423,6 +439,12 @@ def clang_precompile_command(template_command, module_name, source_path, pcm_pat
 def build_clangd_module_pcms(template_command, discovered, order):
     module_dir_abs = os.path.join(PROJECT_DIR, CLANGD_MODULE_DIR)
     os.makedirs(module_dir_abs, exist_ok=True)
+    # Remove stale PCMs so clangd does not pick up old or broken artifacts.
+    for path in glob(os.path.join(module_dir_abs, "*.pcm")):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
     pcm_paths = {name: os.path.join(module_dir_abs, "{}.pcm".format(name)) for name in discovered}
     built = []
     for name in order:
@@ -479,6 +501,8 @@ def main():
     parser.add_argument("--env", help="PlatformIO environment name")
     parser.add_argument("--compiledb", default="compile_commands.json", help="Input PlatformIO compile_commands.json")
     parser.add_argument("--output", default=".clangd-db/compile_commands.json", help="Output clangd compile_commands.json")
+    parser.add_argument("--clangd-module-pcms", action="store_true", help="Precompile and attach module PCMs for clangd (can improve module resolution but may crash some clangd versions)")
+    parser.add_argument("--no-clangd-module-pcms", action="store_true", help="Do not precompile or attach module PCMs (safer, default)")
     args = parser.parse_args()
 
     compiledb_path = resolve_path(args.compiledb)
@@ -498,19 +522,29 @@ def main():
     discovered_all = {}
     all_order = []
 
+    unit_map = {}
+    order = []
+    use_module_pcms = bool(getattr(args, "clangd_module_pcms", False)) and not bool(getattr(args, "no_clangd_module_pcms", False))
     if firmware_source:
         template = pick_template(entries, env_name, entry_source)
-        discovered_all = discover_all_modules()
-        try:
-            all_order = topo_sort_all(discovered_all)
-        except RuntimeError:
-            # Fall back to selected chain ordering if full graph has issues.
-            discovered_all = {}
-            all_order = []
-        if discovered_all:
-            # Refresh selected-chain discovery too (uses same module metadata).
-            pass
-        built_pcms, pcm_paths, module_dir_abs = build_clangd_module_pcms(template, discovered_all, all_order)
+        unit_map, order = discover_modules(firmware_source)
+        if unit_map and use_module_pcms:
+            # Precompile only modules required by the selected firmware for this env.
+            # Precompiling every module in the repo with this env's flags can fail for
+            # modules that belong to other firmwares/environments.
+            built_pcms, pcm_paths, module_dir_abs = build_clangd_module_pcms(template, unit_map, order)
+        else:
+            # Default/safe: do not precompile/attach C++ module PCMs for clangd.
+            # For embedded cross-target C++23 modules, some clangd versions can
+            # crash when loading or indexing with prebuilt module state in certain
+            # contexts. Remove stale PCMs that could be discovered accidentally.
+            if os.path.isdir(module_dir_abs):
+                for path in glob(os.path.join(module_dir_abs, "*.pcm")):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+            module_dir_abs = None
 
     # Base sanitized DB.
     by_file = {}
@@ -533,36 +567,27 @@ def main():
     selected_firmware = None
     if firmware_source:
         selected_firmware = norm_rel(resolve_path(firmware_source))
-        unit_map, order = discover_modules(firmware_source)
         template = pick_template(entries, env_name, entry_source)
         # Add/replace required module units and selected firmware.
+        # Attach module PCM flags only when explicitly enabled (helps module
+        # resolution but can crash some clangd versions with embedded modules).
+        cmd_module_dir = module_dir_abs if use_module_pcms and built_pcms else None
         for name in order:
             src = unit_map[name]["source"]
             rel = norm_rel(src)
             by_file[rel] = {
                 "directory": PROJECT_DIR,
-                "command": make_command_for_source(template, src, module_dir_abs=module_dir_abs),
+                "command": make_command_for_source(template, src, module_dir_abs=cmd_module_dir),
                 "file": rel,
             }
             module_sources.append(rel)
         by_file[selected_firmware] = {
             "directory": PROJECT_DIR,
-            "command": make_command_for_source(template, selected_firmware, module_dir_abs=module_dir_abs),
+            "command": make_command_for_source(template, selected_firmware, module_dir_abs=cmd_module_dir),
             "file": selected_firmware,
         }
-        # Give every other project module an explicit sanitized command so clangd
-        # does not infer one from the selected firmware/entry (which can create
-        # conflicting module providers for the active env).
-        for path in glob(os.path.join(PROJECT_DIR, "src", "**", "*.module.cpp"), recursive=True):
-            rel = norm_rel(path)
-            if rel == selected_firmware or rel in module_sources:
-                continue
-            by_file[rel] = {
-                "directory": PROJECT_DIR,
-                "command": make_command_for_source(template, path, module_dir_abs=module_dir_abs),
-                "file": rel,
-            }
         # Ensure entry source present/sanitized for env.
+        selected_entry = None
         if entry_source:
             entry_candidates = [
                 os.path.join(PROJECT_DIR, "src", entry_source),
@@ -571,20 +596,23 @@ def main():
             for cand in entry_candidates:
                 if os.path.isfile(cand):
                     rel = norm_rel(cand)
+                    selected_entry = rel
                     by_file[rel] = {
                         "directory": PROJECT_DIR,
-                        "command": make_command_for_source(template, cand, module_dir_abs=module_dir_abs),
+                        "command": make_command_for_source(template, cand, module_dir_abs=cmd_module_dir),
                         "file": rel,
                     }
                     break
-            # Provide explicit commands for other project entry points to avoid inference.
+            # Provide explicit commands for other project entry points to avoid
+            # inference from the selected module firmware. Only the selected entry
+            # should see module PCM flags.
             for path in glob(os.path.join(PROJECT_DIR, "src", "main_*.cpp")):
                 rel = norm_rel(path)
                 if rel in by_file:
                     continue
                 by_file[rel] = {
                     "directory": PROJECT_DIR,
-                    "command": make_command_for_source(template, path, module_dir_abs=module_dir_abs),
+                    "command": make_command_for_source(template, path, module_dir_abs=(cmd_module_dir if rel == selected_entry else None)),
                     "file": rel,
                 }
     else:

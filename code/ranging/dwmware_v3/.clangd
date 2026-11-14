@@ -2,7 +2,6 @@ CompileFlags:
   CompilationDatabase: .clangd-db
   Remove:
     - -fmodules-ts
-    - -fno-rtti
     - -mlongcalls
     - -mdisable-hardware-atomics
     - -fstrict-volatile-bitfields

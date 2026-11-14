@@ -1,7 +1,7 @@
 {
     "C_Cpp.intelliSenseEngine": "disabled",
     "clangd.enabled": true,
-    "clangd.path": "/usr/bin/clangd",
+    "clangd.path": "/home/robin/.local/bin/clangd",
     "clangd.arguments": [
         "--background-index",
         "--header-insertion=never"

@@ -95,8 +95,8 @@ public:
 
         txmsg.msgtype = TagRangeResp;
 
-
-        txmsg.sender = *idmap.find(getDeviceAddress());
+        config.address = *idmap.find(getDeviceAddress());
+        txmsg.sender = config.address;
         Serial.print("set address to ");
         Serial.println(txmsg.sender);
 
@@ -141,7 +141,7 @@ public:
 
                 /* Check that the frame is a poll sent by "SS TWR initiator" example.
                  * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
-                if (rxmsg->receiver == 0/*config.address*/ && rxmsg->msgtype == AnchorRange) // if destination is our address
+                if (rxmsg->receiver == config.address && rxmsg->msgtype == AnchorRange) // if destination is our address
                 {
                     // UART_puts("CHECK\r\n");
 

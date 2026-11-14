@@ -141,6 +141,7 @@ class UWB_Common{
     struct Config{
         dwt_config_t dwconfig;
         bool enable_serialreport = false;
+        uint8_t address = 0;
     };
 
     Config config = {standard_dwconfig, 0x0};
